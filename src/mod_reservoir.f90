@@ -30,9 +30,9 @@ subroutine initialize_model_parameters(model_parameters,processor,num_of_procs)
    model_parameters%trial_name_extra_end = ''!'climo_2kbias_10_year_then_platue_speedy_bc_atmo_no_ice_2k_sst_mean_20std_increase_'
 
    model_parameters%discardlength = 24*10!7
-   model_parameters%traininglength =  12000!227760 - 24*10 !- 40*24!166440 - 24*10  !87600*2+24*10!3+24*10!188280 !254040 !81600!188280!0!0!0!166600!81600 !00!58000!67000!77000
-   model_parameters%predictionlength = 8760*20!*70!8760*70!8760*3!1 + 24*5!8760*30 + 24*5!504!8760*11 + 24*5 !504!0
-   model_parameters%synclength = 24*14!*4 + 3*24!24*14*2 !+ 180*24
+   model_parameters%traininglength =  227760 - 24*10 !- 40*24!166440 - 24*10  !87600*2+24*10!3+24*10!188280 !254040 !81600!188280!0!0!0!166600!81600 !00!58000!67000!77000
+   model_parameters%predictionlength = 8760*10!*70!8760*70!8760*3!1 + 24*5!8760*30 + 24*5!504!8760*11 + 24*5 !504!0
+   model_parameters%synclength = 24*14*2*3!*4 + 3*24!24*14*2 !+ 180*24
    model_parameters%timestep = 6!1 !6
    model_parameters%timestep_slab = 24*7!24*7!*14!*2!*7
 
@@ -1714,7 +1714,7 @@ subroutine write_trained_res(reservoir,model_parameters,grid)
 
   integer :: i 
 
-  file_path = '/scratch/user/troyarcomano/ML_SPEEDY_WEIGHTS/'
+  file_path = '/scratch/user/dpp94/ML_SPEEDY_WEIGHTS/'
 
   write(worker_char,'(i0.4)') reservoir%assigned_region
   write(height_char,'(i0.1)') grid%level_index
@@ -1743,7 +1743,7 @@ subroutine write_controller_file(model_parameters,reservoir)
 
    character(len=:), allocatable :: file_path
 
-   file_path = '/scratch/user/troyarcomano/ML_SPEEDY_WEIGHTS/'//trim(model_parameters%trial_name)//'_controller_file.txt'
+   file_path = '/scratch/user/dpp94/ML_SPEEDY_WEIGHTS/'//trim(model_parameters%trial_name)//'_controller_file.txt'
  
    open (10, file=file_path, status='unknown')
 

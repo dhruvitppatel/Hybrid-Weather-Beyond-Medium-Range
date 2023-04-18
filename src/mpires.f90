@@ -98,7 +98,7 @@ module mpires
 
         logical :: make_file
 
-        file_path = '/scratch/user/troyarcomano/Predictions/Hybrid/'
+        file_path = '/scratch/user/dpp94/Predictions/Hybrid/'
         speedy_file = file_path//'hybrid_speedy_out.nc'
         hybrid_out_root='hybrid_prediction_era'
         truth_out_root = 'era_truth'
@@ -218,7 +218,7 @@ module mpires
      subroutine sendrecievegrid(res,timestep,ocean_model)
         use resdomain, only : tile_4d_and_logp_to_local_state_input, tile_4d_and_logp_state_vec_res1d, unstandardize_state_vec_input, tile_4d_and_logp_full_grid_to_local_res_vec, &
                               processor_decomposition_manual, getxyresextent, tile_full_grid_with_local_state_vec_res1d, standardize_state_vec_input, standardize_state_vec_res, &
-                              tile_4d_to_local_state_input, tile_full_2d_grid_with_local_res, tile_4d_and_logp_to_local_state_input_slab
+                              tile_4d_to_local_state_input, tile_full_2d_grid_with_local_res, tile_4d_and_logp_to_local_state_input_slab, tile_full_2d_grid_with_local_res_ohtc, tile_4d_and_logp_to_local_state_input_slab_ohtc
 
         use mod_utilities, only : unstandardize_data, standardize_data_given_pars3d, standardize_data_given_pars1d, linear_increase_then_platue
 
@@ -315,7 +315,7 @@ module mpires
               if(ocean_model) then
                 if(res%reservoir_special(i,1)%sst_bool_prediction) then 
                   if(res%reservoir_special(i,1)%ohtc_prediction) then
-                     call tile_full_2d_grid_with_local_res(res%model_parameters,res%model_parameters%region_indices(i),res%reservoir_special(i,1)%outvec,wholegrid_sst)
+                     call tile_full_2d_grid_with_local_res_ohtc(res%model_parameters,res%model_parameters%region_indices(i),res%reservoir_special(i,1)%outvec,wholegrid_sst,wholegrid_ohtc)
                   else 
                      call tile_full_2d_grid_with_local_res(res%model_parameters,res%model_parameters%region_indices(i),res%reservoir_special(i,1)%outvec,wholegrid_sst) 
                   endif  
@@ -441,9 +441,15 @@ module mpires
 
                     call MPI_RECV(sendreceivedata,receive_size,MPI_DOUBLE_PRECISION,from,tag,mpi_res%mpi_world,MPI_STATUS_IGNORE,mpi_res%ierr)
 
-                    !print *, 'from',from,'tag',tag,'sst data',sendreceivedata
-                    !print *, 'region_indices(i)',region_indices(i),i 
-                    call tile_full_2d_grid_with_local_res(res%model_parameters,region_indices(i),sendreceivedata,wholegrid_sst)
+                    print *, 'from',from,'tag',tag,'sst data',sendreceivedata
+                    print *, 'region_indices(i)',region_indices(i),i
+                    print *, 'recieve size',receive_size 
+                    if(res%model_parameters%ohtc_bool_input) then
+                     call tile_full_2d_grid_with_local_res_ohtc(res%model_parameters,region_indices(i),sendreceivedata,wholegrid_sst,wholegrid_ohtc)
+                    else
+                     call tile_full_2d_grid_with_local_res(res%model_parameters,region_indices(i),sendreceivedata,wholegrid_sst)
+                    endif
+                    print *, 'wholegrid_ohtc', wholegrid_ohtc
 
                     deallocate(sendreceivedata)
 
@@ -472,11 +478,14 @@ module mpires
                 do j=1, ygrid
                    if(res%model_parameters%sea_mask(i,j) > 0.0) then
                       wholegrid_sst(i,j) = res%model_parameters%base_sst_grid(i,j)
+                      if(res%model_parameters%ohtc_bool_input) then
+                        wholegrid_ohtc(i,j) = 0.0_dp
+                      endif
                    endif
                 enddo
              enddo 
            endif 
-
+          
            if(ocean_model .and. .not. res%model_parameters%train_on_sst_anomalies) then
               where(wholegrid_sst < 272.0)
                  wholegrid_sst = 272.0_dp
@@ -504,7 +513,7 @@ module mpires
            write(day,'(I2.2)') calendar%currentday
            write(hour,'(I2.2)') calendar%currenthour
 
-           file_path = '/scratch/user/troyarcomano/Predictions/Hybrid/'
+           file_path = '/scratch/user/dpp94/Predictions/Hybrid/'
            date_file = month//'_'//day//'_'//year//'_'//hour
            hybrid_out_file_name = file_path//hybrid_out_root//res%model_parameters%trial_name//res%model_parameters%trial_name_extra_end//trial_word//date_file//file_end
 
@@ -593,9 +602,11 @@ module mpires
 
                  if(ocean_model) then 
                    if(res%reservoir_special(i,1)%sst_bool_prediction) then
-  
+                      if(res%reservoir_special(i,1)%ohtc_prediction) then 
+                         call tile_4d_and_logp_to_local_state_input_slab(res%model_parameters,res%model_parameters%region_indices(i),wholegrid_ohtc,res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%ohtc_start:res%grid_special(i,1)%ohtc_end)) 
+                         call standardize_data_given_pars1d(res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%ohtc_start:res%grid_special(i,1)%ohtc_end),res%grid_special(i,1)%mean(res%grid_special(i,1)%ohtc_mean_std_idx),res%grid_special(i,1)%std(res%grid_special(i,1)%ohtc_mean_std_idx))
+                      endif
                       call tile_4d_and_logp_to_local_state_input_slab(res%model_parameters,res%model_parameters%region_indices(i),wholegrid_sst,res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%sst_start:res%grid_special(i,1)%sst_end))
-
                       call standardize_data_given_pars1d(res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%sst_start:res%grid_special(i,1)%sst_end),res%grid_special(i,1)%mean(res%grid_special(i,1)%sst_mean_std_idx),res%grid_special(i,1)%std(res%grid_special(i,1)%sst_mean_std_idx)) 
                    endif 
 
@@ -653,8 +664,12 @@ module mpires
                     call getsend_receive_size_input_slab(res%model_parameters,region_indices(i),receive_size)
 
                     allocate(sendreceivedata(receive_size))
-
-                    call tile_4d_and_logp_to_local_state_input_slab(res%model_parameters,region_indices(i),wholegrid_sst,sendreceivedata)
+                    
+                    if(res%model_parameters%ohtc_bool_input) then
+                      call tile_4d_and_logp_to_local_state_input_slab_ohtc(res%model_parameters,region_indices(i),wholegrid_sst,wholegrid_ohtc,sendreceivedata)
+                    else
+                      call tile_4d_and_logp_to_local_state_input_slab(res%model_parameters,region_indices(i),wholegrid_sst,sendreceivedata)
+                    endif
 
                     to = proc_num
 
@@ -775,11 +790,14 @@ module mpires
            enddo
            if(ocean_model) then
               if(res%reservoir_special(i,1)%sst_bool_prediction) then
-                 res%reservoir_special(i,1)%averaged_atmo_input_vec(:,mod(timestep-1,res%model_parameters%timestep_slab/res%model_parameters%timestep-1)+1) = res%reservoir(i,j-1)%feedback(res%reservoir_special(i,1)%atmo_training_data_idx)
+                 res%reservoir_special(i,1)%averaged_atmo_input_vec(res%grid_special(i,1)%atmo3d_start:res%grid_special(i,1)%tisr_end,mod(timestep-1,res%model_parameters%timestep_slab/res%model_parameters%timestep-1)+1) = res%reservoir(i,j-1)%feedback(res%reservoir_special(i,1)%atmo_training_data_idx)
+                 if(res%reservoir_special(i,1)%ohtc_prediction) then
+                   res%reservoir_special(i,1)%averaged_atmo_input_vec(res%grid_special(i,1)%ohtc_start:res%grid_special(i,1)%ohtc_end,mod(timestep-1,res%model_parameters%timestep_slab/res%model_parameters%timestep-1)+1) = res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%ohtc_start:res%grid_special(i,1)%ohtc_end)
+                 endif
                  !NOTE averaging is done for everything needs to change
                  if(res%reservoir_special(i,1)%assigned_region == 10) print *,'averaged_atmo_input_vec(1,:)',res%reservoir_special(i,1)%averaged_atmo_input_vec(1,:)
                  res%reservoir_special(i,1)%feedback = sum(res%reservoir_special(i,1)%averaged_atmo_input_vec,dim=2)/(res%model_parameters%timestep_slab/res%model_parameters%timestep-1) !res%reservoir(i,j-1)%feedback(res%reservoir_special(i,1)%atmo_training_data_idx)
-                 if(res%reservoir_special(i,1)%assigned_region == 10) print *,'res%reservoir_special(i,1)%feedback(1)',res%reservoir_special(i,1)%feedback(1)
+                 if(res%reservoir_special(i,1)%assigned_region == 411) print *,'mpires.sendrecievegrid. res%reservoir_special(i,1)%feedback',res%reservoir_special(i,1)%feedback
                  if(res%model_parameters%non_stationary_ocn_climo) then
                    res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%sst_start:res%grid_special(i,1)%sst_end) = res%reservoir(i,j-1)%feedback(res%grid(i,j-1)%sst_start:res%grid(i,j-1)%sst_end)
                    temp2d = reshape(res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%sst_start:res%grid_special(i,1)%sst_end),[res%grid_special(i,1)%inputxchunk,res%grid_special(i,1)%inputychunk])
@@ -1125,7 +1143,7 @@ module mpires
            truth_out_root = 'era_truth'
            file_end = '.nc'
            trial_word = 'trial_'
-           file_path = '/scratch/user/troyarcomano/Predictions/Hybrid/'
+           file_path = '/scratch/user/dpp94/Predictions/Hybrid/'
 
            call get_current_time_delta_hour(calendar,res%model_parameters%traininglength+res%model_parameters%synclength+res%model_parameters%prediction_markers(res%model_parameters%current_trial_number))
            write(year,'(I4.4)') calendar%currentyear
@@ -1309,7 +1327,7 @@ module mpires
            write(day,'(I2.2)') calendar%currentday
            write(hour,'(I2.2)') calendar%currenthour
 
-           file_path = '/scratch/user/troyarcomano/Predictions/Hybrid/'
+           file_path = '/scratch/user/dpp94/Predictions/Hybrid/'
            date_file = month//'_'//day//'_'//year//'_'//hour
            hybrid_out_file_name = file_path//hybrid_out_root//res%model_parameters%trial_name//res%model_parameters%trial_name_extra_end//trial_word//date_file//file_end
 
@@ -1510,7 +1528,7 @@ module mpires
            write(day,'(I2.2)') calendar%currentday
            write(hour,'(I2.2)') calendar%currenthour
 
-           file_path = '/scratch/user/troyarcomano/Predictions/Hybrid/'
+           file_path = '/scratch/user/dpp94/Predictions/Hybrid/'
            date_file = month//'_'//day//'_'//year//'_'//hour
            hybrid_out_file_name = file_path//hybrid_out_root//res%model_parameters%trial_name//res%model_parameters%trial_name_extra_end//trial_word//date_file//file_end
 
@@ -1571,7 +1589,7 @@ module mpires
 
        logical :: make_file
 
-       file_path = '/scratch/user/troyarcomano/Predictions/Hybrid/'
+       file_path = '/scratch/user/dpp94/Predictions/Hybrid/'
        speedy_file = file_path//'hybrid_speedy_out.nc'
 
        call get_current_time_delta_hour(calendar,model_parameters%traininglength+model_parameters%prediction_markers(model_parameters%current_trial_number)+model_parameters%synclength+timestep*model_parameters%timestep)

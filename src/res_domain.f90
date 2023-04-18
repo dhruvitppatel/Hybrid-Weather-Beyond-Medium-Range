@@ -848,6 +848,34 @@ module resdomain
 
          return
       end subroutine
+
+      subroutine tile_full_2d_grid_with_local_res_ohtc(model_parameters,region_num,statevec,wholegrid2d,wholegrid2d_ohtc)
+         !Takes the 1d res vector and converts it to the 4d and 2d grid target
+         !(res) grid
+         real(kind=dp), intent(in)        :: statevec(:)
+         integer, intent(in)              :: region_num
+         type(model_parameters_type), intent(in) :: model_parameters
+
+         real(kind=dp), intent(inout) :: wholegrid2d(:,:)
+         real(kind=dp), intent(inout) :: wholegrid2d_ohtc(:,:)
+
+         integer :: localres_xstart,localres_xend,localres_ystart,localres_yend,localres_xchunk,localres_ychunk
+         integer :: localres_zstart,localres_zend,localres_zchunk
+         integer :: length
+
+         length = size(statevec,1)
+
+         call getxyresextent(model_parameters%number_of_regions,region_num,localres_xstart,localres_xend,localres_ystart,localres_yend,localres_xchunk,localres_ychunk)
+
+         !print *,
+         !'localres_xstart:localres_xend,localres_ystart:localres_yend',localres_xstart,localres_xend,localres_ystart,localres_yend
+         !print *, 'statevec(1:length)',statevec(1:length)
+         wholegrid2d(localres_xstart:localres_xend,localres_ystart:localres_yend) = reshape(statevec(1:localres_xchunk*localres_ychunk),(/localres_xchunk,localres_ychunk/))
+         wholegrid2d_ohtc(localres_xstart:localres_xend,localres_ystart:localres_yend) = reshape(statevec(localres_xchunk*localres_ychunk+1:length), (/localres_xchunk,localres_ychunk/))
+
+         return
+      end subroutine
+
  
       subroutine tile_4d_and_logp_state_vec_input1d(reservoir,grid,statevec,grid4d,grid2d)
          !Tiler that takes a 1d local state vector and returns the 4d grid and
@@ -1147,6 +1175,36 @@ module resdomain
          veclength = size(inputvec)
 
          inputvec(1:x*y) = reshape(localgrid2d,(/x*y/))
+
+         return
+      end subroutine
+
+      subroutine tile_4d_and_logp_to_local_state_input_slab_ohtc(model_parameters,region_num,grid2d,grid2d_ohtc,inputvec)
+        !Takes the 4d and 2d grids and makes an input vector
+         type(model_parameters_type), intent(in) :: model_parameters
+
+         real(kind=dp), intent(in)        :: grid2d(:,:)
+         real(kind=dp), intent(in)        :: grid2d_ohtc(:,:)
+
+         integer, intent(in)              :: region_num
+
+         real(kind=dp) , intent(inout)    :: inputvec(:)
+
+         real(kind=dp), allocatable :: localgrid2d(:,:), localgrid2d_ohtc(:,:)
+
+         integer :: numvars, x, y, z, veclength
+         integer :: localres_zstart,localres_zend,localreszchunk
+
+         call tileoverlapgrid(grid2d,model_parameters%number_of_regions,region_num,model_parameters%overlap,localgrid2d)
+         call tileoverlapgrid(grid2d_ohtc,model_parameterS%number_of_regions,region_num,model_parameters%overlap,localgrid2d_ohtc)
+
+         x = size(localgrid2d,1)
+         y = size(localgrid2d,2)
+
+         veclength = size(inputvec)
+
+         inputvec(1:x*y) = reshape(localgrid2d,(/x*y/))
+         inputvec(x*y+1:veclength) = reshape(localgrid2d_ohtc,(/x*y/))
 
          return
       end subroutine

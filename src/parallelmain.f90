@@ -137,12 +137,11 @@ program main
 
   enddo 
   endif 
-
   !If we already trained and are just reading in files then we go here 
   if(trained_model) then
     !Loop 1: Loop over all sub domains (regions) on each processor
     print *, 'res%model_parameters%num_of_regions_on_proc',res%model_parameters%num_of_regions_on_proc
-    do i=1, res%model_parameters%num_of_regions_on_proc
+    do i=1,res%model_parameters%num_of_regions_on_proc
        print *, 'i', i
        !Loop 2: Loop over each vertical level for a particular sub domain
         do j=1,res%model_parameters%num_vert_levels
@@ -196,8 +195,8 @@ program main
           call initialize_prediction_slab(res%reservoir_special(i,1),res%model_parameters,res%grid_special(i,1),res%reservoir(i,j-1),res%grid(i,j-1))
         !endif
      endif 
-  enddo 
-
+  enddo
+ 
   !Main prediction loop. 
   !Loop 1 through the user specified number of predictions
   !Loop 2 through time for a specific prediction
@@ -235,7 +234,7 @@ program main
            enddo
            !print *, 'mod((t-1)*res%model_parameters%timestep,res%model_parameters%timestep_slab)',mod((t-1)*res%model_parameters%timestep,res%model_parameters%timestep_slab)
            if(res%model_parameters%slab_ocean_model_bool) then !NOTE TODO ML ocean doesnt get called until t = mod(res%model_parameters%timestep,res%model_parameters%timestep_slab) == 0
-             if(mod((t)*res%model_parameters%timestep,res%model_parameters%timestep_slab) == 0 .and. res%reservoir_special(i,1)%sst_bool_prediction .and. .not. res%model_parameters%non_stationary_ocn_climo ) then
+             if(mod((t-1)*res%model_parameters%timestep,res%model_parameters%timestep_slab) == 0 .and. res%reservoir_special(i,1)%sst_bool_prediction .and. .not. res%model_parameters%non_stationary_ocn_climo ) then
                 if(res%reservoir_special(i,1)%assigned_region == 954) print *, 'calling predict slab'
                 !TODO rolling_average_over_a_period(grid,period)
                 !if( t > 28) then
@@ -250,7 +249,6 @@ program main
            endif 
         enddo
 
-  
         if(res%model_parameters%slab_ocean_model_bool) then !if(mod(t*res%model_parameters%timestep,res%model_parameters%timestep_slab) == 0) then
            slab_model = .True.
         else

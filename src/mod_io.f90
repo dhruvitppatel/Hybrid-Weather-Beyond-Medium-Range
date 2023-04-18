@@ -496,7 +496,7 @@ module mod_io
            endif
 
            if(model_parameters%ohtc_bool_input) then
-             call nc_check(nf90_inq_varid(file_id,varname(6)%str,array_id))
+             call nc_check(nf90_inq_varid(file_id,varname(8)%str,array_id))
              call nc_check(nf90_put_var(file_id, array_id, grid3d(4,:,:),start=start3d, count=varcount3d))
            endif
 
@@ -1943,7 +1943,7 @@ module mod_io
       else
         stride = 1
       endif
-
+      
       era_var_names(1)%str = 'Temperature'
       era_var_names(2)%str = 'U-wind'
       era_var_names(3)%str = 'V-wind'
@@ -1969,7 +1969,7 @@ module mod_io
            !allocate(era_data%eravariables(num_of_era_vars-1,grid%inputxchunk,grid%inputychunk,grid%inputzchunk,dim_length(4)/stride))
            allocate(era_data%eravariables(num_of_era_vars-1,grid%inputxchunk,grid%inputychunk,zgrid,dim_length(4)/stride))
          endif 
-
+         
          !check if its a periodicboundary or not 
          if(grid%periodicboundary) then 
            !Do stuff
@@ -1998,7 +1998,7 @@ module mod_io
            start4d = [integer:: grid%input_xstart,grid%input_ystart,1,start_time]
            count4d = [integer:: grid%inputxchunk,grid%inputychunk,zgrid,dim_length(4)/stride]
            stride4d = [integer:: 1,1,1,stride]
- 
+           print *, 'mod_io. read_era_data_parallel. start4d, count4d ,', start4d, count4d
            call nc_check(nf90_get_var(ncid,varid,era_data%eravariables(i,:,:,:,:),start=start4d,count=count4d))!,stride=stride4d))      
         endif 
       enddo 
@@ -2778,7 +2778,7 @@ module mod_io
          call nc_check(nf90_inquire_dimension(ncid,dimids(j),len=dim_length(j)),message='nf90_inquire_dimension')
       enddo
 
-
+      !print *, 'mod_io/read_3d_file_parallel. dim_length(1), dim_length(2), dim_length(3)', dim_length(1), dim_length(2), dim_length(3)
       if(present(time_length)) then
         dim_length(3) = time_length
       endif
@@ -2806,7 +2806,9 @@ module mod_io
         count3d = [integer:: grid%inputxchunk,grid%inputychunk,dim_length(3)/stride]
         stride3d = [integer:: 1,1,stride]
 
+        !print *, 'mod_io/read_3d_file_parallel. start3d(3), count3d(3), size(var3d,3) ', start3d(3), count3d(3), size(var3d,3)
         call nc_check(nf90_get_var(ncid,varid,var3d,start=start3d,count=count3d))
+
       endif
       call nc_check(nf90_close(ncid))
     end subroutine read_3d_file_parallel
@@ -2949,7 +2951,7 @@ module mod_io
 
       integer :: ncid
 
-      file_path = '/scratch/user/troyarcomano/ML_SPEEDY_WEIGHTS/'
+      file_path = '/scratch/user/dpp94/ML_SPEEDY_WEIGHTS/'
 
       write(worker_char,'(i0.4)') reservoir%assigned_region
       print *, 'reservoir%assigned_region',reservoir%assigned_region
@@ -2996,7 +2998,7 @@ module mod_io
 
       integer :: ncid
 
-      file_path = '/scratch/user/troyarcomano/ML_SPEEDY_WEIGHTS/'
+      file_path = '/scratch/user/dpp94/ML_SPEEDY_WEIGHTS/'
 
       write(worker_char,'(i0.4)') reservoir%assigned_region
       print *, 'reservoir%assigned_region',reservoir%assigned_region

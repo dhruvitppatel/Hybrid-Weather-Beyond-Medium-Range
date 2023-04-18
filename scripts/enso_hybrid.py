@@ -1831,7 +1831,7 @@ def get_wavelet_fft_power(dat,dt,t0):
     return var * glbl_power, var * fft_power, period, fftfreqs
 
 
-ds_hybrid = xr.open_dataset('/scratch/user/troyarcomano/Predictions/Hybrid/hybrid_prediction_era6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_multi_gaussian_noise_newest_version_32_processors_root_ssttrial_12_29_2006_00.nc')
+#ds_hybrid = xr.open_dataset('/scratch/user/troyarcomano/Predictions/Hybrid/hybrid_prediction_era6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_multi_gaussian_noise_newest_version_32_processors_root_ssttrial_12_29_2006_00.nc')
 #ds_hybrid = xr.open_dataset('/scratch/user/dpp94/Predictions/Hybrid/hybrid_prediction_era6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_multi_gaussian_noiseno_climo_ssttrial_01_12_2007_00.nc')
 
 #hybrid_prediction_era6000_20_20_20_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ocean_model7d_0.0001beta_sigma0.6_dp_noise10trial_12_29_2006_00.nc')
@@ -1846,31 +1846,31 @@ ds_hybrid = xr.open_dataset('/scratch/user/troyarcomano/Predictions/Hybrid/hybri
 #hybrid_prediction_era6000_20_20_20_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevels_1_vertlap_0_tstep6_ml_only_ocean_input_speedy_testtrial_12_31_1999_00.nc') #hybrid_prediction_era6000_20_20_20_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevels_1_vertlap_0_tstep6_ml_only_ocean_leak_averaged_atmotrial_12_31_1999_00.nc')#hybrid_prediction_era6000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_1_vertlap_0_ocean_model14d_0.1rho_10noise_beta0.001_20years_speedyinput_falsetrial_12_31_1999_00.nc')
 
 #ds_speedy = xr.open_dataset('/scratch/user/troyarcomano/temp_storage/speedy_slab_ocean_original_sim.nc')
-ds_speedy = xr.open_dataset('/scratch/user/troyarcomano/temp_storage/speedy_slab_with_qocn.nc')
-print(ds_speedy)
+#ds_speedy = xr.open_dataset('/scratch/user/troyarcomano/temp_storage/speedy_slab_with_qocn.nc')
+#print(ds_speedy)
 
-startdate = datetime(1981,1,1,0)
-enddate = datetime(2021,1,1,0)
+#startdate = datetime(1981,1,1,0)
+#enddate = datetime(2021,1,1,0)
 #enddate = datetime(1985,1,1,0)
 
-enddate_soi_era = datetime(2007,1,1,0)
+#enddate_soi_era = datetime(2007,1,1,0)
 #enddate_soi_era = datetime(1989,1,1,0)
 
-startdate_hybrid = datetime(2007,1,1,0)
-enddate_hybrid = datetime(2021,1,1,0)
+#startdate_hybrid = datetime(2007,1,1,0)
+#enddate_hybrid = datetime(2021,1,1,0)
 
-enddate_hybrid_future = datetime(2072,1,1,0)
+#enddate_hybrid_future = datetime(2072,1,1,0)
 
-timestep = 6
+#timestep = 6
 
-ds_observed = get_obs_sst_timeseries(startdate,enddate,timestep)
+#ds_observed = get_obs_sst_timeseries(startdate,enddate,timestep)
 
-ds_era = get_obs_atmo_timeseries_var(startdate,enddate_soi_era,timestep,'logp')
+#ds_era = get_obs_atmo_timeseries_var(startdate,enddate_soi_era,timestep,'logp')
 #print(ds_era)
 
-ds_hybrid =  make_ds_time_dim(ds_hybrid,6,startdate_hybrid)
+#ds_hybrid =  make_ds_time_dim(ds_hybrid,6,startdate_hybrid)
 
-enso_combined_plots(ds_observed,ds_era,ds_hybrid)
+#enso_combined_plots(ds_observed,ds_era,ds_hybrid)
 
 #sst_annual_climo_and_var_grl2022_paper(ds_hybrid,ds_observed,ds_speedy)
 #oni_soi_timeseries(ds_hybrid,ds_observed,ds_era,ds_speedy)
@@ -1882,5 +1882,4 @@ enso_combined_plots(ds_observed,ds_era,ds_hybrid)
 #autocorr_plot(ds_hybrid,ds_observed)
 
 #count_enso_peaks(uniform_filter1d(hybrid_nino3_4, size=360),1000,0.8)
-
 
