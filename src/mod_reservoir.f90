@@ -23,7 +23,7 @@ subroutine initialize_model_parameters(model_parameters,processor,num_of_procs)
    write_training_weights = .True.
 
    model_parameters%num_predictions = 1
-   model_parameters%trial_name = '6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_test'!2kbias_10_year_then_platue_speedy_atmo_only' !14d_0.9rho_10noise_beta0.001_20years'  
+   model_parameters%trial_name = '6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_test_noavg_'!2kbias_10_year_then_platue_speedy_atmo_only' !14d_0.9rho_10noise_beta0.001_20years'  
    !model_parameters%trial_name = '6000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_6_slab_ocean_model_true_precip_true'
    !'4000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_2_full_timestep_1'
    !model_parameters%trial_name = '4000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_2_full_test_climate_all_tisr_longer'

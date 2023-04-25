@@ -449,7 +449,7 @@ module mpires
                     else
                      call tile_full_2d_grid_with_local_res(res%model_parameters,region_indices(i),sendreceivedata,wholegrid_sst)
                     endif
-                    print *, 'wholegrid_ohtc', wholegrid_ohtc
+                    !print *, 'wholegrid_ohtc', wholegrid_ohtc
 
                     deallocate(sendreceivedata)
 
@@ -478,9 +478,9 @@ module mpires
                 do j=1, ygrid
                    if(res%model_parameters%sea_mask(i,j) > 0.0) then
                       wholegrid_sst(i,j) = res%model_parameters%base_sst_grid(i,j)
-                      if(res%model_parameters%ohtc_bool_input) then
-                        wholegrid_ohtc(i,j) = 0.0_dp
-                      endif
+                      !if(res%model_parameters%ohtc_bool_input) then
+                        !wholegrid_ohtc(i,j) = 0.0_dp
+                      !endif
                    endif
                 enddo
              enddo 
@@ -796,7 +796,7 @@ module mpires
                  endif
                  !NOTE averaging is done for everything needs to change
                  if(res%reservoir_special(i,1)%assigned_region == 10) print *,'averaged_atmo_input_vec(1,:)',res%reservoir_special(i,1)%averaged_atmo_input_vec(1,:)
-                 res%reservoir_special(i,1)%feedback = sum(res%reservoir_special(i,1)%averaged_atmo_input_vec,dim=2)/(res%model_parameters%timestep_slab/res%model_parameters%timestep-1) !res%reservoir(i,j-1)%feedback(res%reservoir_special(i,1)%atmo_training_data_idx)
+                 res%reservoir_special(i,1)%feedback = res%reservoir_special(i,1)%averaged_atmo_input_vec(:,mod(timestep-1,res%model_parameters%timestep_slab/res%model_parameters%timestep-1)+1) !sum(res%reservoir_special(i,1)%averaged_atmo_input_vec,dim=2)/(res%model_parameters%timestep_slab/res%model_parameters%timestep-1) !res%reservoir(i,j-1)%feedback(res%reservoir_special(i,1)%atmo_training_data_idx)
                  if(res%reservoir_special(i,1)%assigned_region == 411) print *,'mpires.sendrecievegrid. res%reservoir_special(i,1)%feedback',res%reservoir_special(i,1)%feedback
                  if(res%model_parameters%non_stationary_ocn_climo) then
                    res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%sst_start:res%grid_special(i,1)%sst_end) = res%reservoir(i,j-1)%feedback(res%grid(i,j-1)%sst_start:res%grid(i,j-1)%sst_end)

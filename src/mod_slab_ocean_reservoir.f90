@@ -25,11 +25,11 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
 
   model_parameters%ml_only_ocean = .True.
 
-  reservoir%m = 4000!6000
+  reservoir%m = 6000
 
   reservoir%deg = 6
   reservoir%radius = 0.9
-  reservoir%beta_res = 0.0001_dp
+  reservoir%beta_res = 100.0_dp !0.0001_dp
   reservoir%beta_model = 1.0_dp
   reservoir%sigma = 0.6_dp !0.5_dp
 
@@ -400,7 +400,7 @@ subroutine get_training_data_from_atmo(reservoir,model_parameters,grid,reservoir
      endif     
 
      if(reservoir%assigned_region == 10) print *, 'before reservoir%trainingdata(grid%sst_start,1:100)',reservoir%trainingdata(grid%sst_start,1:100)
-     call rolling_average_over_a_period_2d(reservoir%trainingdata,model_parameters%timestep_slab) !reservoir%trainingdata(grid%atmo3d_start:grid%logp_end,:),model_parameters%timestep_slab) 
+     !call rolling_average_over_a_period_2d(reservoir%trainingdata,model_parameters%timestep_slab) !reservoir%trainingdata(grid%atmo3d_start:grid%logp_end,:),model_parameters%timestep_slab) 
      if(reservoir%assigned_region == 10) print *, 'after reservoir%trainingdata(grid%sst_start,1:100)',reservoir%trainingdata(grid%sst_start,1:100)
      !if(reservoir%assigned_region == 10) print *, 'slab training data = 100',reservoir%trainingdata(:,100)
   endif 
@@ -456,7 +456,7 @@ subroutine get_prediction_data_from_atmo(reservoir,model_parameters,grid,reservo
      !Remember reservoir_atmo%predictiondata has a time resolution of
      !model_parameters%timestep so its not hourly (probably)
       allocate(temp,source = reservoir_atmo%predictiondata)
-      call rolling_average_over_a_period_2d(temp,atmo_ocean_tstep_ratio) !temp(grid%atmo3d_start:grid%logp_end,:),atmo_ocean_tstep_ratio)
+      !call rolling_average_over_a_period_2d(temp,atmo_ocean_tstep_ratio) !temp(grid%atmo3d_start:grid%logp_end,:),atmo_ocean_tstep_ratio)
  
      reservoir%predictiondata(grid%atmo3d_start:grid%logp_end,:) = temp(grid_atmo%atmo3d_end - grid_atmo%inputxchunk*grid_atmo%inputychunk*reservoir_atmo%local_predictvars+1:grid_atmo%logp_end,1:size(reservoir_atmo%predictiondata,2):atmo_ocean_tstep_ratio)
      reservoir%predictiondata(grid%sst_start:grid%sst_end,:) = temp(grid_atmo%sst_start:grid_atmo%sst_end,1:size(reservoir_atmo%predictiondata,2):atmo_ocean_tstep_ratio)
