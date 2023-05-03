@@ -849,6 +849,31 @@ module resdomain
          return
       end subroutine
 
+     subroutine tile_3d_state_vec_res1d_ocean(model_parameters,region_num,statevec,grid3d)
+         !Takes the 1d res vector and converts it to the 3d grid target
+         !(res) grid
+         real(kind=dp), intent(in)        :: statevec(:)
+         integer, intent(in)              :: region_num
+         type(model_parameters_type), intent(in) :: model_parameters
+
+         real(kind=dp), intent(inout) :: grid3d(:,:,:)
+
+         integer :: localres_xstart,localres_xend,localres_ystart,localres_yend,localres_xchunk,localres_ychunk
+         integer :: length
+
+         length = size(statevec,1)
+
+         call getxyresextent(model_parameters%number_of_regions,region_num,localres_xstart,localres_xend,localres_ystart,localres_yend,localres_xchunk,localres_ychunk)
+
+         !print *, 'localres_xstart:localres_xend,localres_ystart:localres_yend',localres_xstart,localres_xend,localres_ystart,localres_yend
+         !print *, 'statevec(1:length)',statevec(1:length)
+
+         grid3d = reshape(statevec(1:length),(/size(grid3d,1),localres_xchunk,localres_ychunk/))
+
+         return
+      end subroutine
+ 
+
       subroutine tile_full_2d_grid_with_local_res_ohtc(model_parameters,region_num,statevec,wholegrid2d,wholegrid2d_ohtc)
          !Takes the 1d res vector and converts it to the 4d and 2d grid target
          !(res) grid

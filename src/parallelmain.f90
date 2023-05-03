@@ -3,6 +3,7 @@ program main
   use mpi
   use, intrinsic :: ieee_arithmetic
 
+  use mod_io, only : write_netcdf_parallel_mpi_ocean
   use mpires, only : mpi_res, startmpi, distribute_prediction_marker, killmpi, predictionmpicontroller, sendrecievegrid, send_outvec_ml_contrib, send_outvec_speedy_contrib
   use mod_reservoir, only : initialize_model_parameters, allocate_res_new, train_reservoir, start_prediction, initialize_prediction, predict, trained_reservoir_prediction, predict_ml
   use mod_slab_ocean_reservoir, only : initialize_slab_ocean_model, train_slab_ocean_model, get_training_data_from_atmo, initialize_prediction_slab, start_prediction_slab, predict_slab, predict_slab_ml, trained_ocean_reservoir_prediction
@@ -17,7 +18,7 @@ program main
   integer :: standardizing_vars, i, j, k , t, prediction_num
 
   logical :: runspeedy = .False.
-  logical :: trained_model = .False.
+  logical :: trained_model = .True.
   logical :: slab_model
  
   real(kind=dp), allocatable :: test_state(:), test_feedback(:)
@@ -131,6 +132,9 @@ program main
          test_state = res%reservoir_special(i,1)%saved_state
          deallocate(res%reservoir_special(i,1)%trainingdata) 
        else 
+         call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
+         call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
+         call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
          print *, 'i,j not training slab ocean',i,j
        endif 
      endif 
@@ -193,7 +197,12 @@ program main
           print *,'ocean model initialize prediction region,i',res%reservoir_special(i,1)%assigned_region,i
           print *, 'shape(res%reservoir_special)',shape(res%reservoir_special)
           call initialize_prediction_slab(res%reservoir_special(i,1),res%model_parameters,res%grid_special(i,1),res%reservoir(i,j-1),res%grid(i,j-1))
-        !endif
+        if(.not. res%reservoir_special(i,1)%sst_bool_prediction) then
+          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*98)/res%model_parameters%timestep_slab-1)
+          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*98)/res%model_parameters%timestep_slab-1)
+          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*98)/res%model_parameters%timestep_slab-1)
+          print *, 'i,j not prediting sst ', i, j  
+        endif
      endif 
   enddo
  
@@ -208,9 +217,9 @@ program main
           do i=1, res%model_parameters%num_of_regions_on_proc
              do j=1,res%model_parameters%num_vert_levels
                 if(res%reservoir(i,j)%assigned_region == 954) print *, 'starting start_prediction region',res%model_parameters%region_indices(i),'prediction_num prediction_num',prediction_num
-                call start_prediction(res%reservoir(i,j),res%model_parameters,res%grid(i,j),prediction_num)
+                  call start_prediction(res%reservoir(i,j),res%model_parameters,res%grid(i,j),prediction_num)
            
-                res%reservoir(i,j)%current_state = res%reservoir(i,j)%saved_state 
+                  res%reservoir(i,j)%current_state = res%reservoir(i,j)%saved_state
              enddo
              if(res%model_parameters%slab_ocean_model_bool) then
                !if(res%reservoir_special(i,1)%sst_bool_prediction) then 
@@ -218,7 +227,13 @@ program main
 
                  if(res%reservoir_special(i,1)%sst_bool_prediction) then
                    res%reservoir_special(i,1)%current_state = res%reservoir_special(i,1)%saved_state
-                 endif 
+                 endif
+               if(.not. res%reservoir_special(i,1)%sst_bool_prediction) then
+                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*12)/res%model_parameters%timestep_slab-1)
+                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*12)/res%model_parameters%timestep_slab-1)
+                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*12)/res%model_parameters%timestep_slab-1)
+                  print *, 'i,j not predicting sst ', i, j
+                endif  
              endif 
           enddo 
         endif

@@ -441,9 +441,9 @@ module mpires
 
                     call MPI_RECV(sendreceivedata,receive_size,MPI_DOUBLE_PRECISION,from,tag,mpi_res%mpi_world,MPI_STATUS_IGNORE,mpi_res%ierr)
 
-                    print *, 'from',from,'tag',tag,'sst data',sendreceivedata
-                    print *, 'region_indices(i)',region_indices(i),i
-                    print *, 'recieve size',receive_size 
+                    !print *, 'from',from,'tag',tag,'sst data',sendreceivedata
+                    !print *, 'region_indices(i)',region_indices(i),i
+                    !print *, 'recieve size',receive_size 
                     if(res%model_parameters%ohtc_bool_input) then
                      call tile_full_2d_grid_with_local_res_ohtc(res%model_parameters,region_indices(i),sendreceivedata,wholegrid_sst,wholegrid_ohtc)
                     else
@@ -796,8 +796,8 @@ module mpires
                  endif
                  !NOTE averaging is done for everything needs to change
                  if(res%reservoir_special(i,1)%assigned_region == 10) print *,'averaged_atmo_input_vec(1,:)',res%reservoir_special(i,1)%averaged_atmo_input_vec(1,:)
-                 res%reservoir_special(i,1)%feedback = res%reservoir_special(i,1)%averaged_atmo_input_vec(:,mod(timestep-1,res%model_parameters%timestep_slab/res%model_parameters%timestep-1)+1) !sum(res%reservoir_special(i,1)%averaged_atmo_input_vec,dim=2)/(res%model_parameters%timestep_slab/res%model_parameters%timestep-1) !res%reservoir(i,j-1)%feedback(res%reservoir_special(i,1)%atmo_training_data_idx)
-                 if(res%reservoir_special(i,1)%assigned_region == 411) print *,'mpires.sendrecievegrid. res%reservoir_special(i,1)%feedback',res%reservoir_special(i,1)%feedback
+                 res%reservoir_special(i,1)%feedback = sum(res%reservoir_special(i,1)%averaged_atmo_input_vec,dim=2)/(res%model_parameters%timestep_slab/res%model_parameters%timestep-1) !res%reservoir(i,j-1)%feedback(res%reservoir_special(i,1)%atmo_training_data_idx) !for no avg. res%reservoir_special(i,1)%averaged_atmo_input_vec(:,mod(timestep-1,res%model_parameters%timestep_slab/res%model_parameters%timestep-1)+1)
+                 !if(res%reservoir_special(i,1)%assigned_region == 411) print *,'mpires.sendrecievegrid. res%reservoir_special(i,1)%feedback',res%reservoir_special(i,1)%feedback
                  if(res%model_parameters%non_stationary_ocn_climo) then
                    res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%sst_start:res%grid_special(i,1)%sst_end) = res%reservoir(i,j-1)%feedback(res%grid(i,j-1)%sst_start:res%grid(i,j-1)%sst_end)
                    temp2d = reshape(res%reservoir_special(i,1)%feedback(res%grid_special(i,1)%sst_start:res%grid_special(i,1)%sst_end),[res%grid_special(i,1)%inputxchunk,res%grid_special(i,1)%inputychunk])
