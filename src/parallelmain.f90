@@ -198,9 +198,9 @@ program main
           print *, 'shape(res%reservoir_special)',shape(res%reservoir_special)
           call initialize_prediction_slab(res%reservoir_special(i,1),res%model_parameters,res%grid_special(i,1),res%reservoir(i,j-1),res%grid(i,j-1))
         if(.not. res%reservoir_special(i,1)%sst_bool_prediction) then
-          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*98)/res%model_parameters%timestep_slab-1)
-          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*98)/res%model_parameters%timestep_slab-1)
-          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*98)/res%model_parameters%timestep_slab-1)
+          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*364)/res%model_parameters%timestep_slab-1)
+          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*364)/res%model_parameters%timestep_slab-1)
+          call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_unnoisysync_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*364)/res%model_parameters%timestep_slab-1)
           print *, 'i,j not prediting sst ', i, j  
         endif
      endif 
@@ -229,9 +229,9 @@ program main
                    res%reservoir_special(i,1)%current_state = res%reservoir_special(i,1)%saved_state
                  endif
                if(.not. res%reservoir_special(i,1)%sst_bool_prediction) then
-                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*12)/res%model_parameters%timestep_slab-1)
-                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*12)/res%model_parameters%timestep_slab-1)
-                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*12)/res%model_parameters%timestep_slab-1)
+                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*3)/res%model_parameters%timestep_slab-1)
+                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*3)/res%model_parameters%timestep_slab-1)
+                  call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'vanilla_sync_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(24*14*2*3)/res%model_parameters%timestep_slab-1)
                   print *, 'i,j not predicting sst ', i, j
                 endif  
              endif 

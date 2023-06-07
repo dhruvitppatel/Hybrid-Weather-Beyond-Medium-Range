@@ -39,7 +39,8 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
 
   reservoir%noisemag = 0.10
 
-  reservoir%leakage = 1.0_dp!/14.0_dp !/4.0_dp !12.0_dp
+  reservoir%leakage_slab_lower = 1.0_dp/30.0_dp !/4.0_dp !12.0_dp
+  reservoir%leakage_slab_upper = 1.0_dp
 
   !call set_reservoir_by_region(reservoir,grid)
 
@@ -188,6 +189,8 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
 
    character(len=:), allocatable :: base_trial_name
    character(len=50) :: beta_res_char,beta_model_char,prior_char
+
+   real(kind=dp)  :: temp
      
    call gen_res(reservoir)
 
@@ -208,6 +211,25 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
       
       reservoir%win((i-1)*q+1:i*q,i) = reservoir%sigma*ip
    enddo
+
+   allocate(reservoir%leakage_slab(reservoir%n))
+  
+   do i=1,reservoir%n
+      call random_number(temp)
+      temp = 3.0_dp*temp - 3.0_dp
+      reservoir%leakage_slab(i) = 10.0_dp ** temp
+      !if(i < (reservoir%n/3)) then !(temp > 0.5) then
+      !  reservoir%leakage_slab(i) = reservoir%leakage_slab_lower
+      !elseif((i > (reservoir%n/3)) .and. (i < (2*reservoir%n/3))) then
+      !  reservoir%leakage_slab(i) = 1.0_dp / 7.0_dp
+      !else
+      !  reservoir%leakage_slab(i) = reservoir%leakage_slab_upper
+      !endif
+   enddo
+   
+   if(reservoir%assigned_region == 690) then
+     print *, 'reservoir%leakage_slab ,', reservoir%leakage_slab
+   endif
    
    deallocate(rand)
    deallocate(ip) 
@@ -897,7 +919,7 @@ subroutine initialize_prediction_slab(reservoir,model_parameters,grid,atmo_reser
    !Try syncing on un-noisy data
    if(.not.(allocated(reservoir%saved_state))) allocate(reservoir%saved_state(reservoir%n))
    reservoir%saved_state = 0
-   un_noisy_sync = 24*98!2160!700
+   un_noisy_sync = 24*364!98!2160!700
 
    !From this point on reservoir%trainingdata and reservoir%imperfect_model have a temporal resolution model_parameters%timestep_slab
    !instead of 1 hour resolution and atmo_reservoir%trainingdata has a temporal
@@ -1020,12 +1042,12 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
    y = 0
    do i=1, model_parameters%discardlength/model_parameters%timestep_slab
       info = MKL_SPARSE_D_MV(SPARSE_OPERATION_NON_TRANSPOSE,alpha,reservoir%cooA,reservoir%descrA,x,beta,y)
-      print *, 'shape(reservoir%win)',shape(reservoir%win),'shape(trainingdata(:,i))',shape(trainingdata(:,i)), 'worker',reservoir%assigned_region
+      !print *, 'shape(reservoir%win)',shape(reservoir%win),'shape(trainingdata(:,i))',shape(trainingdata(:,i)), 'worker',reservoir%assigned_region
       temp = matmul(reservoir%win,gaussian_noise_1d_function(trainingdata(:,i),reservoir%noisemag))
       
       x_ = tanh(y+temp)
 
-      x = (1_dp-reservoir%leakage)*x + reservoir%leakage*x_
+      x = (1_dp-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
       y = 0
    enddo
@@ -1047,7 +1069,7 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
         temp = matmul(reservoir%win,gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag))
 
         x_ = tanh(y+temp)
-        x = (1-reservoir%leakage)*x + reservoir%leakage*x_
+        x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
         reservoir%states(:,reservoir%batch_size) = x
 
@@ -1064,7 +1086,7 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
         temp = matmul(reservoir%win,gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag)) 
          
         x_ = tanh(y+temp)
-        x = (1-reservoir%leakage)*x + reservoir%leakage*x_
+        x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
         reservoir%states(:,1) = x
       else 
@@ -1072,7 +1094,7 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
         temp = matmul(reservoir%win,gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag))
 
         x_ = tanh(y+temp)
-        x = (1-reservoir%leakage)*x + reservoir%leakage*x_
+        x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
         reservoir%states(:,mod(i+1,reservoir%batch_size)) = x
       endif 
@@ -1388,7 +1410,7 @@ subroutine synchronize(reservoir,input,x,length)
        temp = matmul(reservoir%win,input(:,i))
 
        x_ = tanh(y+temp)
-       x = (1-reservoir%leakage)*x + reservoir%leakage*x_
+       x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
     enddo 
     
@@ -1435,7 +1457,7 @@ subroutine synchronize_error_unnoisysync(reservoir,model_parameters,grid,input,x
        temp = matmul(reservoir%win,input(:,i))
 
        x_ = tanh(y+temp)
-       x = (1-reservoir%leakage)*x + reservoir%leakage*x_
+       x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
        x_augment = x
        x_augment(2:reservoir%n:2) = x_augment(2:reservoir%n:2)**2
@@ -1535,7 +1557,7 @@ subroutine synchronize_error_sync(reservoir,model_parameters,grid,input,x,length
        temp = matmul(reservoir%win,input(:,i))
 
        x_ = tanh(y+temp)
-       x = (1-reservoir%leakage)*x + reservoir%leakage*x_
+       x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
        x_augment = x
        x_augment(2:reservoir%n:2) = x_augment(2:reservoir%n:2)**2
@@ -1672,7 +1694,7 @@ subroutine predict_slab_ml(reservoir,model_parameters,grid,x)
     temp = matmul(reservoir%win,reservoir%feedback)
 
     x_ = tanh(y + temp)
-    x = (1-reservoir%leakage)*x + reservoir%leakage*x_
+    x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
     x_temp = x
     x_temp(2:reservoir%n:2) = x_temp(2:reservoir%n:2)**2
@@ -1889,6 +1911,8 @@ subroutine write_trained_res(reservoir,model_parameters,grid)
 
   call write_netcdf_1d_non_met_data_real(grid%mean,'mean',file_path//'worker_'//worker_char//'_ocean_'//trim(model_parameters%trial_name)//'.nc','unitless','mean_x')
   call write_netcdf_1d_non_met_data_real(grid%std,'std',file_path//'worker_'//worker_char//'_ocean_'//trim(model_parameters%trial_name)//'.nc','unitless','std_x')
+
+  call write_netcdf_1d_non_met_data_real(reservoir%leakage_slab,'leakage_slab',file_path//'worker_'//worker_char//'_ocean_'//trim(model_parameters%trial_name)//'.nc','unitless','leakage_slab_x')
 
 end subroutine
 

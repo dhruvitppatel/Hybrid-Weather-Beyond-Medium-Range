@@ -3314,6 +3314,10 @@ module mod_io
 
         call read_netcdf_1d_dp_opened('std',ncid,grid%std)
 
+        !if(reservoir%sst_bool_input) then
+        call read_netcdf_1d_dp_opened('leakage_slab',ncid,reservoir%leakage_slab)
+        !endif
+
         call nc_check(nf90_close(ncid))
 
         reservoir%sst_bool_input = .True.
