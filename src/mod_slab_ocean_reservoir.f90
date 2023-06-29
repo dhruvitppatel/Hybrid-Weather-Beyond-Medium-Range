@@ -39,7 +39,7 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
 
   reservoir%noisemag = 0.10
 
-  reservoir%leakage_slab_lower = 1.0_dp/30.0_dp !/4.0_dp !12.0_dp
+  reservoir%leakage_slab_lower = 1.0_dp/7.0_dp !/4.0_dp !12.0_dp
   reservoir%leakage_slab_upper = 1.0_dp
 
   !call set_reservoir_by_region(reservoir,grid)
@@ -214,17 +214,18 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
 
    allocate(reservoir%leakage_slab(reservoir%n))
   
+   !do i=1,reservoir%n
+   !   call random_number(temp)
+   !   temp = 3.0_dp*temp - 3.0_dp
+   !   reservoir%leakage_slab(i) = 10.0_dp ** temp
+   !enddo
+
    do i=1,reservoir%n
-      call random_number(temp)
-      temp = 3.0_dp*temp - 3.0_dp
-      reservoir%leakage_slab(i) = 10.0_dp ** temp
-      !if(i < (reservoir%n/3)) then !(temp > 0.5) then
-      !  reservoir%leakage_slab(i) = reservoir%leakage_slab_lower
-      !elseif((i > (reservoir%n/3)) .and. (i < (2*reservoir%n/3))) then
-      !  reservoir%leakage_slab(i) = 1.0_dp / 7.0_dp
-      !else
-      !  reservoir%leakage_slab(i) = reservoir%leakage_slab_upper
-      !endif
+      if(mod(i,2) == 0) then
+        reservoir%leakage_slab(i) = reservoir%leakage_slab_lower
+      else
+        reservoir%leakage_slab(i) = reservoir%leakage_slab_upper
+      endif
    enddo
    
    if(reservoir%assigned_region == 690) then
