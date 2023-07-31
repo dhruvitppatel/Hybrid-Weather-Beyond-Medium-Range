@@ -214,19 +214,19 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
 
    allocate(reservoir%leakage_slab(reservoir%n))
   
-   !do i=1,reservoir%n
-   !   call random_number(temp)
-   !   temp = 3.0_dp*temp - 3.0_dp
-   !   reservoir%leakage_slab(i) = 10.0_dp ** temp
-   !enddo
-
    do i=1,reservoir%n
-      if(mod(i,2) == 0) then
-        reservoir%leakage_slab(i) = reservoir%leakage_slab_lower
-      else
-        reservoir%leakage_slab(i) = reservoir%leakage_slab_upper
-      endif
+      call random_number(temp)
+      temp = 3.0_dp*temp - 3.0_dp
+      reservoir%leakage_slab(i) = 10.0_dp ** temp
    enddo
+
+   !do i=1,reservoir%n
+   !   if(mod(i,2) == 0) then
+   !     reservoir%leakage_slab(i) = reservoir%leakage_slab_lower
+   !   else
+   !     reservoir%leakage_slab(i) = reservoir%leakage_slab_upper
+   !   endif
+   !enddo
    
    if(reservoir%assigned_region == 690) then
      print *, 'reservoir%leakage_slab ,', reservoir%leakage_slab
