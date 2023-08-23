@@ -284,7 +284,7 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
      deallocate(reservoir%imperfect_model_states)
    endif
 
-   call training_error(reservoir,model_parameters,grid,reservoir%trainingdata(:,model_parameters%timestep_slab:model_parameters%traininglength:model_parameters%timestep_slab))
+   !call training_error(reservoir,model_parameters,grid,reservoir%trainingdata(:,model_parameters%timestep_slab:model_parameters%traininglength:model_parameters%timestep_slab))
 
    print *, 'cleaning up', reservoir%assigned_region
    call clean_batch(reservoir)
@@ -1512,9 +1512,9 @@ subroutine synchronize_error_unnoisysync(reservoir,model_parameters,grid,input,x
     grid4d_difference = grid4d_prediction - grid4d_truth
    print *, 'Writing data to disk now'
    print *, 'grid%res_xstart, grid%res_ystart', grid%res_xstart, grid%res_ystart
-   call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_unnoisysync_error_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_difference)
-   call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_unnoisysync_prediction_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_prediction)
-   call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_unnoisysync_truth_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_truth)
+   !call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_unnoisysync_error_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_difference)
+   !call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_unnoisysync_prediction_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_prediction)
+   !call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_unnoisysync_truth_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_truth)
 
 end subroutine
 
@@ -1612,9 +1612,9 @@ subroutine synchronize_error_sync(reservoir,model_parameters,grid,input,x,length
     grid4d_difference = grid4d_prediction - grid4d_truth
     print *, 'Writing data to disk now'
     print *, 'grid%res_xstart, grid%res_ystart', grid%res_xstart, grid%res_ystart
-    call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_sync_error_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_difference)
-    call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_sync_prediction_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_prediction)
-    call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_sync_truth_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_truth)
+    !call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_sync_error_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_difference)
+    !call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_sync_prediction_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_prediction)
+    !call write_netcdf_parallel_mpi_ocean(model_parameters,grid%res_xstart,grid%res_ystart,1,'vanilla_sync_truth_ocean_'//model_parameters%trial_name//'.nc',mpi_res,.True.,grid4d=grid4d_truth)
 
 end subroutine
 
@@ -2036,10 +2036,10 @@ subroutine read_ohtc_parallel_training(reservoir,model_parameters,grid,ohtc_var,
 
    character(len=:), allocatable :: ohtc_file 
 
-   ohtc_file = '/scratch/user/troyarcomano/ORAS5/regridded_sohtc300_control_monthly_highres_2D_CONS_v0.1_hourly_gcc.nc'
+   ohtc_file = '/scratch/user/troyarcomano/ORAS5/regridded_sohtc300_control_hourly_full_data_gcc.nc' ! '/scratch/user/troyarcomano/ORAS5/regridded_sohtc300_control_monthly_highres_2D_CONS_v0.1_hourly_gcc.nc'
 
    !Starting date of the ohtc data
-   call initialize_calendar(ohtc_calendar,1979,1,16,0)
+   call initialize_calendar(ohtc_calendar,1958,1,16,0) !1979,1,16,0)
 
    call get_current_time_delta_hour(ohtc_calendar,0)
 
@@ -2083,10 +2083,10 @@ subroutine read_ohtc_parallel_prediction(reservoir,model_parameters,grid,ohtc_va
 
    character(len=:), allocatable :: ohtc_file
 
-   ohtc_file = '/scratch/user/troyarcomano/ORAS5/regridded_sohtc300_control_monthly_highres_2D_CONS_v0.1_hourly_gcc.nc'
+   ohtc_file = '/scratch/user/troyarcomano/ORAS5/regridded_sohtc300_control_hourly_full_data_gcc.nc' !'/scratch/user/troyarcomano/ORAS5/regridded_sohtc300_control_monthly_highres_2D_CONS_v0.1_hourly_gcc.nc'
 
    !Starting date of the ohtc data
-   call initialize_calendar(ohtc_calendar,1979,1,16,0)
+   call initialize_calendar(ohtc_calendar,1958,1,16,0) !1979,1,16,0)
 
    call get_current_time_delta_hour(ohtc_calendar,0)
 
