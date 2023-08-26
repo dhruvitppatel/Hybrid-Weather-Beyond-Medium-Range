@@ -23,14 +23,14 @@ subroutine initialize_model_parameters(model_parameters,processor,num_of_procs)
    write_training_weights = .True.
 
    model_parameters%num_predictions = 3!60!40
-   model_parameters%trial_name = '6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_multiple_leakage_test_oceantimestep_72hr_train1959_2003_'!2kbias_10_year_then_platue_speedy_atmo_only' !14d_0.9rho_10noise_beta0.001_20years'  
+   model_parameters%trial_name = '6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_multiple_leakage_temp_enc_oceantimestep_72hr_test_'!2kbias_10_year_then_platue_speedy_atmo_only' !14d_0.9rho_10noise_beta0.001_20years'  
    !model_parameters%trial_name = '6000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_6_slab_ocean_model_true_precip_true'
    !'4000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_2_full_timestep_1'
    !model_parameters%trial_name = '4000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_2_full_test_climate_all_tisr_longer'
    model_parameters%trial_name_extra_end = ''!'climo_2kbias_10_year_then_platue_speedy_bc_atmo_no_ice_2k_sst_mean_20std_increase_'
 
    model_parameters%discardlength = 24*10!7
-   model_parameters%traininglength = 8760*44 - 24*10!227760 - 24*10 !- 40*24!166440 - 24*10  !87600*2+24*10!3+24*10!188280 !254040 !81600!188280!0!0!0!166600!81600 !00!58000!67000!77000
+   model_parameters%traininglength = 8760*2!44 - 24*10!227760 - 24*10 !- 40*24!166440 - 24*10  !87600*2+24*10!3+24*10!188280 !254040 !81600!188280!0!0!0!166600!81600 !00!58000!67000!77000
    model_parameters%predictionlength = 8760*2!8760*70!8760*3!1 + 24*5!8760*30 + 24*5!504!8760*11 + 24*5 !504!0
    model_parameters%synclength = 24*14*2*3!*4 + 3*24!24*14*2 !+ 180*24
    model_parameters%timestep = 6!1 !6
@@ -42,6 +42,8 @@ subroutine initialize_model_parameters(model_parameters,processor,num_of_procs)
    model_parameters%train_on_sst_anomalies = .False.
 
    model_parameters%ohtc_bool_input = .True.
+
+   model_parameters%temp_enc_bool = .True.
 
    model_parameters%non_stationary_ocn_climo = .False.
    model_parameters%final_sst_bias = 2.0
@@ -172,6 +174,10 @@ subroutine allocate_res_new(reservoir,grid,model_parameters)
   reservoir%k = reservoir%density*reservoir%n*reservoir%n
   reservoir%reservoir_numinputs = reservoir%chunk_size+reservoir%locality
 
+  if(reservoir%temp_enc_bool) then
+    reservoir%reservoir_numinputs = reservoir%reservoir_numinputs + 2
+  endif
+
   if(.not. allocated(reservoir%vals)) allocate(reservoir%vals(reservoir%k))
   if(.not. allocated(reservoir%win))  allocate(reservoir%win(reservoir%n,reservoir%reservoir_numinputs))
   if(.not. allocated(reservoir%wout)) allocate(reservoir%wout(reservoir%chunk_size_prediction,reservoir%n+reservoir%chunk_size_speedy))
@@ -251,6 +257,8 @@ subroutine train_reservoir(reservoir,grid,model_parameters)
     reservoir%precip_input_bool = .False.
     reservoir%precip_bool = .False.
   endif
+
+   reservoir%temp_enc_bool = model_parameters%temp_enc_bool
  
    call get_training_data(reservoir,model_parameters,grid,1)
  
@@ -413,7 +421,8 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
                              standardize_data_3d, &
                              unstandardize_data_2d, &
                              e_constant, &
-                             rolling_average_over_a_period
+                             rolling_average_over_a_period, &
+                             standardize_data_2d
 
    use mod_calendar
    use speedy_res_interface, only : read_era, read_model_states
@@ -428,14 +437,14 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
    type(era_data_type)    :: era_data
    type(speedy_data_type) :: speedy_data
 
-   integer :: mean_std_length
+   integer :: mean_std_length, datalength
 
    reservoir%local_predictvars = model_parameters%full_predictvars
    reservoir%local_heightlevels_input = grid%inputzchunk
 
    reservoir%local_heightlevels_res = grid%reszchunk
 
-   call initialize_calendar(calendar,1959,1,1,0) !1981,1,1,0)
+   call initialize_calendar(calendar,1981,1,1,0) !1959,1,1,0)
 
    call get_current_time_delta_hour(calendar,model_parameters%discardlength+model_parameters%traininglength+model_parameters%synclength)
 
@@ -488,6 +497,15 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
     if(reservoir%sst_bool)  print *, 'era max min sst before',maxval(era_data%era_sst),minval(era_data%era_sst)
     if(reservoir%precip_bool) print *, 'era max min precip rate before',maxval(era_data%era_precip), minval(era_data%era_precip)
   endif
+
+  ! Get temporal encodings
+  if(reservoir%temp_enc_bool) then
+    datalength = size(era_data%eravariables,5) !model_parameters%discardlength + model_parameters%traininglength + model_parameters%synclength
+    if(reservoir%assigned_region == 954) print *, 'temp_enc datalength', datalength
+    call get_temporal_encodings(reservoir,calendar%startyear,calendar%startmonth,calendar%startday,calendar%starthour,datalength,1)
+    if(reservoir%assigned_region == 954) print *, 'temp_enc max min before standardizing, size(res%temp_enc)', maxval(reservoir%temp_enc(1,:)), minval(reservoir%temp_enc(1,:)), size(reservoir%temp_enc)
+  endif 
+
   !Get mean and standard deviation for the first stride of data and use those
   !values for the rest of the program
   if(loop_index == 1) then   
@@ -515,6 +533,11 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
         mean_std_length = mean_std_length + 1 
         grid%sst_mean_std_idx = mean_std_length 
      endif 
+
+     if(reservoir%temp_enc_bool) then
+       mean_std_length = mean_std_length + 1
+       grid%temp_enc_mean_std_idx = mean_std_length
+     endif
 
      allocate(grid%mean(mean_std_length),grid%std(mean_std_length))
 
@@ -551,6 +574,11 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
         !if(reservoir%assigned_region == 954) print *, 'era_data%era_precip after',era_data%era_precip(1,1,1:100)
         call standardize_data_3d(era_data%era_precip,grid%mean(grid%precip_mean_std_idx),grid%std(grid%precip_mean_std_idx))
         if(reservoir%assigned_region == 954) print *, 'precip mean and std',grid%mean(grid%precip_mean_std_idx),grid%std(grid%precip_mean_std_idx)
+     endif
+
+     if(reservoir%temp_enc_bool) then
+       call standardize_data_2d(reservoir%temp_enc,grid%mean(grid%temp_enc_mean_std_idx),grid%std(grid%temp_enc_mean_std_idx))
+       if(reservoir%assigned_region == 954) print *, 'temporal encoding mean and std', grid%mean(grid%temp_enc_mean_std_idx), grid%std(grid%temp_enc_mean_std_idx)
      endif
    else 
      !Standardize the data from the first stride's std and mean 
@@ -590,6 +618,8 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
    grid%logp_end = 0
    grid%sst_start = 0
    grid%sst_end = 0
+   grid%temp_enc_start = 0
+   grid%temp_enc_end = 0
   
    grid%atmo3d_start = 1
    grid%atmo3d_end = model_parameters%full_predictvars*grid%inputxchunk*grid%inputychunk*grid%inputzchunk
@@ -628,7 +658,12 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
      grid%tisr_end = grid%tisr_start + reservoir%tisr_size_input - 1
      reservoir%trainingdata(grid%tisr_start:grid%tisr_end,:) = reshape(era_data%era_tisr,(/reservoir%tisr_size_input,size(era_data%eravariables,5)/))
    endif
-
+  
+   if(reservoir%temp_enc_bool) then
+      grid%temp_enc_start = grid%tisr_end + 1
+      grid%temp_enc_end = grid%temp_enc_start + 1
+      reservoir%trainingdata(grid%temp_enc_start:grid%temp_enc_end,:) = reservoir%temp_enc
+   endif 
    
    if(reservoir%assigned_region == 954) print *, 'reservoir%trainingdata(:,1000)',reservoir%trainingdata(:,1000)
    if(reservoir%assigned_region == 954) print *, 'reservoir%trainingdata(grid%tisr_start,1000:1100)',reservoir%trainingdata(grid%tisr_start,1000:1100)
@@ -641,6 +676,10 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
 
    if(allocated(era_data%era_sst)) then
      deallocate(era_data%era_sst)
+   endif
+
+   if(allocated(reservoir%temp_enc)) then
+     deallocate(reservoir%temp_enc)
    endif
 
 
@@ -1894,6 +1933,8 @@ subroutine trained_reservoir_prediction(reservoir,model_parameters,grid)
     reservoir%precip_input_bool = .False.
     reservoir%precip_bool = .False.
   endif
+
+  reservoir%temp_enc_bool = model_parameters%temp_enc_bool
  
   reservoir%local_predictvars = model_parameters%full_predictvars
   reservoir%local_heightlevels_input = grid%inputzchunk
@@ -1930,6 +1971,12 @@ subroutine trained_reservoir_prediction(reservoir,model_parameters,grid)
     endif 
   endif
 
+  if(reservoir%temp_enc_bool) then
+     mean_std_length = mean_std_length + 1
+     grid%temp_enc_mean_std_idx = mean_std_length
+     print *, 'grid%std(grid%temp_enc_mean_std_idx)', grid%std(grid%temp_enc_mean_std_idx)
+  endif
+
   call allocate_res_new(reservoir,grid,model_parameters)
 
   call mklsparse(reservoir)
@@ -1938,6 +1985,8 @@ subroutine trained_reservoir_prediction(reservoir,model_parameters,grid)
   grid%logp_end = 0
   grid%sst_start = 0
   grid%sst_end = 0
+  grid%temp_enc_start = 0
+  grid%temp_enc_end = 0
 
   grid%atmo3d_start = 1
   grid%atmo3d_end = model_parameters%full_predictvars*grid%inputxchunk*grid%inputychunk*grid%inputzchunk
@@ -1966,6 +2015,48 @@ subroutine trained_reservoir_prediction(reservoir,model_parameters,grid)
      grid%tisr_start = grid%atmo3d_end + reservoir%logp_size_input + reservoir%precip_size_input + reservoir%sst_size_input + 1
      grid%tisr_end = grid%tisr_start + reservoir%tisr_size_input - 1
    endif
+
+   if(reservoir%temp_enc_bool) then
+     grid%temp_enc_start = grid%tisr_end + 1
+     grid%temp_enc_end = grid%temp_enc_start + 1
+   endif
+
+end subroutine
+
+subroutine get_temporal_encodings(reservoir,startyear,startmonth,startday,starthour,length,timestep)
+  use mod_calendar
+
+  type(reservoir_type), intent(inout) :: reservoir
+ 
+  integer, intent(in) :: startyear, startmonth, startday, starthour 
+  integer, intent(in) :: length, timestep 
+
+  type(calendar_type) :: local_calendar
+  
+  integer ::         i, num_hours 
+  real(kind=dp) ::   day_of_year
+  real, parameter :: Pi = 3.1415927
+
+  allocate(reservoir%temp_enc(2,length))
+
+  !Initialize calendar
+  call initialize_calendar(local_calendar,startyear,startmonth,startday,starthour)
+  if(reservoir%assigned_region == 954) print *, 'local_cal year,month,day,hour', local_calendar%startyear, local_calendar%startmonth, local_calendar%startday, local_calendar%starthour
+  
+  !Initialize current time fields
+  call get_current_time_delta_hour(local_calendar,0)
+  if(reservoir%assigned_region == 954) print *, 'local_cal year,month,day,hour current', local_calendar%currentyear, local_calendar%currentmonth, local_calendar%currentday, local_calendar%currenthour
+
+  do i = 1,length
+     call numof_hours_into_year(local_calendar%currentyear,local_calendar%currentmonth,local_calendar%currentday,local_calendar%currenthour,num_hours)
+     day_of_year = num_hours / 24.0_dp
+     if(reservoir%assigned_region == 954) print *, 'num_hours, day_of_year ', num_hours, day_of_year
+     if(reservoir%assigned_region == 954) print *, 'local_cal year,month,day,hour, i', local_calendar%currentyear, local_calendar%currentmonth, local_calendar%currentday, local_calendar%currenthour,i
+     reservoir%temp_enc(1,i) = sin(2.0_dp * Pi * day_of_year / 365.0_dp)
+     reservoir%temp_enc(2,i) = cos(2.0_dp * Pi * day_of_year / 365.0_dp)
+     call get_current_time_delta_hour_from_current(local_calendar,timestep)
+  enddo
+
 end subroutine
 
 end module 

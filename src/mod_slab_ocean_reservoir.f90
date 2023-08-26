@@ -53,6 +53,8 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
   
   reservoir%ohtc_prediction = .True.
 
+  reservoir%temp_enc_bool = .True.
+
   reservoir%num_atmo_levels = 1!grid%inputzchunk
 
   if(reservoir%sst_bool_input) then
@@ -125,6 +127,10 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
   reservoir%n = nodes_per_input*(reservoir%chunk_size+reservoir%locality)
   reservoir%k = reservoir%density*reservoir%n*reservoir%n
   reservoir%reservoir_numinputs = reservoir%chunk_size+reservoir%locality
+
+  if(reservoir%temp_enc_bool) then
+    reservoir%reservoir_numinputs = reservoir%reservoir_numinputs + 2
+  endif
 
   if(.not. allocated(reservoir%vals)) allocate(reservoir%vals(reservoir%k))
   if(.not. allocated(reservoir%win))  allocate(reservoir%win(reservoir%n,reservoir%reservoir_numinputs))
@@ -415,7 +421,9 @@ subroutine get_training_data_from_atmo(reservoir,model_parameters,grid,reservoir
      reservoir%sst_bool_prediction = .False.
      reservoir%ohtc_prediction = .False.
    endif 
-  
+ 
+   reservoir%temp_enc_bool = model_parameters%temp_enc_bool   
+ 
    !Parallel IO requires all of the cpus to call this function 
    if(model_parameters%ohtc_bool_input) then
       print *, 'reading in read_ohtc_parallel_training'
@@ -442,6 +450,10 @@ subroutine get_training_data_from_atmo(reservoir,model_parameters,grid,reservoir
 
      if(reservoir%ohtc_prediction) then
        sst_res_input_size = sst_res_input_size + grid_atmo%inputxchunk*grid_atmo%inputychunk
+     endif
+
+     if(reservoir%temp_enc_bool) then
+       sst_res_input_size = sst_res_input_size + 2
      endif 
 
      print *, 'grid_atmo%sst_start,grid_atmo%sst_end',grid_atmo%sst_start,grid_atmo%sst_end
@@ -461,9 +473,21 @@ subroutine get_training_data_from_atmo(reservoir,model_parameters,grid,reservoir
      if(reservoir%ohtc_prediction) then 
         grid%ohtc_start = grid%tisr_end + 1
         grid%ohtc_end = grid%ohtc_start + grid_atmo%inputxchunk*grid_atmo%inputychunk - 1
+
+        if(reservoir%temp_enc_bool) then
+          grid%temp_enc_start = grid%ohtc_end + 1
+          grid%temp_enc_end = grid%temp_enc_start + 1
+        endif
+ 
+     elseif(reservoir%temp_enc_bool) then
+        grid%temp_enc_start = grid%tisr_end + 1
+        grid%temp_enc_end = grid%temp_enc_start + 1
+   
      endif 
 
      grid%sst_mean_std_idx = grid_atmo%sst_mean_std_idx
+
+     if(reservoir%temp_enc_bool) grid%temp_enc_mean_std_idx = grid_atmo%temp_enc_mean_std_idx
 
      if(reservoir%ohtc_prediction) then
        grid%ohtc_mean_std_idx = 1 !Just over writing the first mean and std from atmo (highest model level temp)
@@ -498,6 +522,13 @@ subroutine get_training_data_from_atmo(reservoir,model_parameters,grid,reservoir
         reservoir%atmo_training_data_idx(counter) = i
      enddo
 
+     if(reservoir%temp_enc_bool) then
+       do i=grid_atmo%temp_enc_start,grid_atmo%temp_enc_end
+          counter = counter + 1
+          reservoir%atmo_training_data_idx(counter) = i
+       enddo
+     endif
+
      print *, 'counter',counter 
      print *, 'shape(reservoir%trainingdata)',shape(reservoir%trainingdata)
      print *, 'grid%atmo3d_start,grid%logp_end',grid%atmo3d_start,grid%logp_end
@@ -514,6 +545,10 @@ subroutine get_training_data_from_atmo(reservoir,model_parameters,grid,reservoir
      if(reservoir%ohtc_prediction) then
        reservoir%trainingdata(grid%ohtc_start:grid%ohtc_end,:) = reshape(ohtc_var(:,:,1:size(reservoir%trainingdata,2)),(/grid%ohtc_end-grid%ohtc_start+1,size(reservoir%trainingdata,2)/))
      endif     
+
+     if(reservoir%temp_enc_bool) then
+       reservoir%trainingdata(grid%temp_enc_start:grid%temp_enc_end,:) = reservoir_atmo%trainingdata(grid_atmo%temp_enc_start:grid_atmo%temp_enc_end,:)
+     endif
 
      if(reservoir%assigned_region == 10) print *, 'before reservoir%trainingdata(grid%sst_start,1:100)',reservoir%trainingdata(grid%sst_start,1:100)
      call rolling_average_over_a_period_2d(reservoir%trainingdata,model_parameters%timestep_slab) !reservoir%trainingdata(grid%atmo3d_start:grid%logp_end,:),model_parameters%timestep_slab) 
@@ -1944,6 +1979,8 @@ subroutine trained_ocean_reservoir_prediction(reservoir,model_parameters,grid,re
      reservoir%ohtc_prediction = .False.
    endif
 
+   reservoir%temp_enc_bool = model_parameters%temp_enc_bool
+
    if(reservoir%sst_bool_prediction) then
 
      if((reservoir_atmo%sst_climo_bool).and.(reservoir_atmo%sst_bool_prediction)) then
@@ -1964,6 +2001,10 @@ subroutine trained_ocean_reservoir_prediction(reservoir,model_parameters,grid,re
        sst_res_input_size = sst_res_input_size + grid_atmo%inputxchunk*grid_atmo%inputychunk
      endif
 
+     if(reservoir%temp_enc_bool) then
+       sst_res_input_size = sst_res_input_size + 2
+     endif
+
      print *, 'grid_atmo%sst_start,grid_atmo%sst_end',grid_atmo%sst_start,grid_atmo%sst_end
 
      grid%atmo3d_start = grid_atmo%atmo3d_start
@@ -1981,9 +2022,18 @@ subroutine trained_ocean_reservoir_prediction(reservoir,model_parameters,grid,re
      if(reservoir%ohtc_prediction) then
         grid%ohtc_start = grid%tisr_end + 1
         grid%ohtc_end = grid%ohtc_start + grid_atmo%inputxchunk*grid_atmo%inputychunk - 1
+        if(reservoir%temp_enc_bool) then
+           grid%temp_enc_start = grid%ohtc_end + 1
+           grid%temp_enc_end = grid%temp_enc_start + 1
+        endif
+     elseif(reservoir%temp_enc_bool) then
+        grid%temp_enc_start = grid%tisr_end + 1
+        grid%temp_enc_end = grid%temp_enc_start + 1
      endif
 
      grid%sst_mean_std_idx = grid_atmo%sst_mean_std_idx
+
+     if(reservoir%temp_enc_bool) grid%temp_enc_mean_std_idx = grid_atmo%temp_enc_mean_std_idx
 
      if(reservoir%ohtc_prediction) then
        allocate(reservoir%atmo_training_data_idx(sst_res_input_size - grid_atmo%inputxchunk*grid_atmo%inputychunk))
@@ -2007,6 +2057,13 @@ subroutine trained_ocean_reservoir_prediction(reservoir,model_parameters,grid,re
         counter = counter + 1
         reservoir%atmo_training_data_idx(counter) = i
      enddo
+
+     if(reservoir%temp_enc_bool) then
+       do i=grid_atmo%temp_enc_start,grid_atmo%temp_enc_end
+          counter = counter + 1
+          reservoir%atmo_training_data_idx(counter) = i
+       enddo
+     endif
  
      if(reservoir%ohtc_prediction) grid%ohtc_mean_std_idx = 1
 
