@@ -289,6 +289,7 @@ module mod_utilities
     
     !Variables related to temporal encodings
     logical :: temp_enc_bool
+    integer :: temp_enc_counter
 
 
     !Becase sst is a special 2d variable its is complicated

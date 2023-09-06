@@ -207,12 +207,15 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
    allocate(ip(q))
    allocate(rand(q))
 
+   !call random_number(reservoir%win)
+   !reservoir%win = 2.0_dp * reservoir%win - 1.0_dp
+
    reservoir%win = 0.0_dp
-
+   
    do i=1,reservoir%reservoir_numinputs
-
+   
       call random_number(rand)
-
+   
       ip = (-1d0 + 2*rand) 
       
       reservoir%win((i-1)*q+1:i*q,i) = reservoir%sigma*ip
@@ -612,7 +615,11 @@ subroutine get_prediction_data_from_atmo(reservoir,model_parameters,grid,reservo
      reservoir%predictiondata(grid%atmo3d_start:grid%logp_end,:) = temp(grid_atmo%atmo3d_end - grid_atmo%inputxchunk*grid_atmo%inputychunk*reservoir_atmo%local_predictvars+1:grid_atmo%logp_end,1:size(reservoir_atmo%predictiondata,2):atmo_ocean_tstep_ratio)
      reservoir%predictiondata(grid%sst_start:grid%sst_end,:) = temp(grid_atmo%sst_start:grid_atmo%sst_end,1:size(reservoir_atmo%predictiondata,2):atmo_ocean_tstep_ratio)
      reservoir%predictiondata(grid%tisr_start:grid%tisr_end,:) = temp(grid_atmo%tisr_start:grid_atmo%tisr_end,1:size(reservoir_atmo%predictiondata,2):atmo_ocean_tstep_ratio)
-     
+    
+     if(reservoir%temp_enc_bool) then
+       reservoir%predictiondata(grid%temp_enc_start:grid%temp_enc_end,:) = temp(grid_atmo%temp_enc_start:grid_atmo%temp_enc_end,1:size(reservoir_atmo%predictiondata,2):atmo_ocean_tstep_ratio)
+     endif
+ 
      deallocate(temp)
   
      if(reservoir%ohtc_prediction) then
@@ -966,6 +973,7 @@ subroutine initialize_prediction_slab(reservoir,model_parameters,grid,atmo_reser
    !print *, 'Finished get_prediction_data_from_atmo' 
    if(reservoir%sst_bool_prediction) then
      print *, 'shape(reservoir%predictiondata)',shape(reservoir%predictiondata),'shape(reservoir%win)',shape(reservoir%win),'un_noisy_sync/(model_parameters%timestep_slab)-1',un_noisy_sync/(model_parameters%timestep_slab)-1
+     !print *, 'mod_slab. sync_unnoisysync. reservoir%predictiondata(temp_enc,:).', reservoir%predictiondata(grid%temp_enc_start:grid%temp_enc_end,:)
 
      !call synchronize(reservoir,reservoir%predictiondata,reservoir%saved_state,un_noisy_sync/(model_parameters%timestep_slab)-1)
      call synchronize_error_unnoisysync(reservoir,model_parameters,grid,reservoir%predictiondata,reservoir%saved_state,un_noisy_sync/(model_parameters%timestep_slab)-1)
