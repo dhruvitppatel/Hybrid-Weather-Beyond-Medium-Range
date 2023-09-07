@@ -161,7 +161,7 @@ program main
 
            print *, 'doing trained_reservoir_prediction'
 
-           call initialize_calendar(calendar,1959,1,1,0) !1981,1,1,0)
+           call initialize_calendar(calendar,1981,1,1,0) !1959,1,1,0)
 
            call trained_reservoir_prediction(res%reservoir(i,j),res%model_parameters,res%grid(i,j))
             
