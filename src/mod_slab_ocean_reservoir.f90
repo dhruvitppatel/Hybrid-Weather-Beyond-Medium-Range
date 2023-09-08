@@ -207,19 +207,20 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
    allocate(ip(q))
    allocate(rand(q))
 
-   !call random_number(reservoir%win)
-   !reservoir%win = 2.0_dp * reservoir%win - 1.0_dp
+   call random_number(reservoir%win)
+   reservoir%win = 2.0_dp * reservoir%win - 1.0_dp
+   reservoir%win = reservoir%sigma * reservoir%win
 
-   reservoir%win = 0.0_dp
-   
-   do i=1,reservoir%reservoir_numinputs
-   
-      call random_number(rand)
-   
-      ip = (-1d0 + 2*rand) 
-      
-      reservoir%win((i-1)*q+1:i*q,i) = reservoir%sigma*ip
-   enddo
+   !reservoir%win = 0.0_dp
+   !
+   !do i=1,reservoir%reservoir_numinputs
+   !
+   !   call random_number(rand)
+   !
+   !   ip = (-1d0 + 2*rand) 
+   !   
+   !   reservoir%win((i-1)*q+1:i*q,i) = reservoir%sigma*ip
+   !enddo
 
    allocate(reservoir%leakage_slab(reservoir%n))
   
