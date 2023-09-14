@@ -23,7 +23,7 @@ subroutine initialize_model_parameters(model_parameters,processor,num_of_procs)
    write_training_weights = .True.
 
    model_parameters%num_predictions = 3!60!40
-   model_parameters%trial_name = '6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_multiple_leakage_temp_enc_oceantimestep_72hr_train1981_2002_denseWin_0tempenc_'!2kbias_10_year_then_platue_speedy_atmo_only' !14d_0.9rho_10noise_beta0.001_20years'  
+   model_parameters%trial_name = '6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_multiple_leakage_temp_enc_oceantimestep_72hr_train1981_2002_'!2kbias_10_year_then_platue_speedy_atmo_only' !14d_0.9rho_10noise_beta0.001_20years'  
    !model_parameters%trial_name = '6000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_6_slab_ocean_model_true_precip_true'
    !'4000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_2_full_timestep_1'
    !model_parameters%trial_name = '4000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_2_full_test_climate_all_tisr_longer'
@@ -43,7 +43,7 @@ subroutine initialize_model_parameters(model_parameters,processor,num_of_procs)
 
    model_parameters%ohtc_bool_input = .True.
 
-   model_parameters%temp_enc_bool = .True.
+   model_parameters%temp_enc_bool = .False.
 
    model_parameters%non_stationary_ocn_climo = .False.
    model_parameters%final_sst_bias = 2.0
@@ -275,22 +275,22 @@ subroutine train_reservoir(reservoir,grid,model_parameters)
    allocate(ip(q))
    allocate(rand(q))
 
-   call random_number(reservoir%win)
-   reservoir%win = 2.0_dp * reservoir%win - 1.0_dp
-   reservoir%win = reservoir%sigma * reservoir%win
-   if(reservoir%assigned_region == 954) print *, 'mod_res.train_res. res%win(:,1)', reservoir%win(:,1)
+   !call random_number(reservoir%win)
+   !reservoir%win = 2.0_dp * reservoir%win - 1.0_dp
+   !reservoir%win = reservoir%sigma * reservoir%win
+   !if(reservoir%assigned_region == 954) print *, 'mod_res.train_res. res%win(:,1)', reservoir%win(:,1)
  
-   !reservoir%win = 0.0_dp
-   !
-   !do i=1,reservoir%reservoir_numinputs
-   ! 
-   !   call random_number(rand)
-   ! 
-   !   ip = (-1d0 + 2*rand) 
-   !   
-   !   reservoir%win((i-1)*q+1:i*q,i) = reservoir%sigma*ip
-   !   !reservoir%win(:,i) = reservoir%sigma*ip
-   !enddo
+   reservoir%win = 0.0_dp
+   
+   do i=1,reservoir%reservoir_numinputs
+    
+      call random_number(rand)
+    
+      ip = (-1d0 + 2*rand) 
+      
+      reservoir%win((i-1)*q+1:i*q,i) = reservoir%sigma*ip
+      !reservoir%win(:,i) = reservoir%sigma*ip
+   enddo
    
    deallocate(rand)
    deallocate(ip) 
@@ -667,7 +667,7 @@ subroutine get_training_data(reservoir,model_parameters,grid,loop_index)
    if(reservoir%temp_enc_bool) then
       grid%temp_enc_start = grid%tisr_end + 1
       grid%temp_enc_end = grid%temp_enc_start + 1
-      reservoir%trainingdata(grid%temp_enc_start:grid%temp_enc_end,:) = 0.0_dp * reservoir%temp_enc
+      reservoir%trainingdata(grid%temp_enc_start:grid%temp_enc_end,:) = reservoir%temp_enc
    endif 
    
    if(reservoir%assigned_region == 954) print *, 'reservoir%trainingdata(:,1000)',reservoir%trainingdata(:,1000)
@@ -888,7 +888,7 @@ subroutine get_prediction_data(reservoir,model_parameters,grid,start_index,lengt
 
    if(reservoir%temp_enc_bool) then
      allocate(temp_enc_temp(2,datalength/model_parameters%timestep))
-     temp_enc_temp = 0.0_dp * reservoir%temp_enc(:,::model_parameters%timestep) 
+     temp_enc_temp = reservoir%temp_enc(:,::model_parameters%timestep) 
      reservoir%predictiondata(grid%temp_enc_start:grid%temp_enc_end,:) = temp_enc_temp(:,1:length/model_parameters%timestep)
      if(temp_enc_load) then
        deallocate(reservoir%temp_enc)
