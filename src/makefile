@@ -1,6 +1,8 @@
 COMPILE1=mpif90
 COMPILE2=mpiifort
 
+date_time = ../datetime-fortran/src
+
 COMLIB1=
 
 COMOTT2=  -traceback -mkl -lnetcdff -larpack -heap-arrays 10000 -mcmodel=medium -nowarn -O3 -lhdf5_fortran -lhdf5 -r8 -msse3 -traceback -standard-realloc-lhs -ipo -fpp -lmkl_intel_lp64 -lmkl_intel_thread -liomp5 -lpthread #-g -check all -check noarg_temp_created -warn -traceback -debug extended -mkl -larpack -heap-arrays 10000 -mcmodel=medium -lhdf5_fortran -lhdf5 -r8 -msse3 -traceback -standard-realloc-lhs -ipo -fpp -lmkl_intel_lp64 -lmkl_intel_thread -liomp5 -lpthread -I/sw/eb/sw/netCDF-Fortran/4.5.2-iimpi-2020a/include -L/sw/eb/sw/netCDF-Fortran/4.5.2-iimpi-2020a/lib -lnetcdff -L/sw/eb/sw/netCDF/4.7.4-iimpi-2020a/lib64 -L/sw/eb/sw/iccifort/2020.1.217/lib/intel64 -lnetcdf -lnetcdf -lm -liomp5 -lpthread #-g -check all -check noarg_temp_created -warn -traceback -debug extended -mkl -lnetcdff -larpack -heap-arrays 10000 -mcmodel=medium -O3 -lhdf5_fortran -lhdf5 -r8 -msse3 -traceback -standard-realloc-lhs -ipo -fpp -lmkl_intel_lp64 -lmkl_intel_thread -liomp5 -lpthread #-axCORE-AVX2\\
@@ -9,8 +11,7 @@ DEBUG_FLAGS= -g -fpe0 -check bounds -warn -traceback -debug extended -mkl -lnetc
 #COMOTT2= -r8 -traceback 
 #-O3 -ffast-math -finline-matmul-limit=0 
 #-g -Wall -Wextra -Warray-temporaries -Wconversion -fimplicit-none -fbacktrace -fcheck=all -ffpe-trap=zero,overflow,underflow -fmax-stack-var-size=65535
-COMOTT1 = -O3 -ffast-math -finline-matmul-limit=0 -finit-real=zero -finit-logical=false -finit-integer=zero -mcmodel=medium -ffree-line-length-none -fallow-argument-mismatch -fconvert=swap -fdefault-real-8 -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl  -m64  -I"${MKLROOT}/include" -I${EBROOTNETCDFMINFORTRAN}/include -L${EBROOTNETCDFMINFORTRAN}/lib64 -lnetcdff -L${EBROOTNETCDF}/lib64 -L${EBROOTGCCCORE}/lib64 -L${EBROOTGCCCORE}/lib -lnetcdf -lnetcdf -ldl -lm -lm -lpthread -I${HDF5_DIR}/include -L${HDF5_DIR}/lib -lhdf5_fortran -lhdf5 -larpack #g  -Wall -fcheck=al -O3 -ffast-math -march=native -funroll-loops -fcheck=all -g -fbacktrace -O3 -ffast-math -funroll-loops
-#COMOTT1= -O3 -ffast-math -fdefault-integer-8 -ffree-line-length-512 -fallow-argument-mismatch -fbacktrace -fconvert=swap -fdefault-real-8 -larpack -DMKL_ILP64 -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl -m64  -I"${MKLROOT}/include" -I${EBROOTNETCDFMINFORTRAN}/include -L${EBROOTNETCDFMINFORTRAN}/lib -lnetcdff -L${EBROOTNETCDF}/lib64 -L${EBROOTGCCCORE}/lib64 -L${EBROOTGCCCORE}/lib -lnetcdf -lnetcdf -ldl -lm -lm -lpthread -I${HDF5_DIR}/include -L${HDF5_DIR}/lib -lhdf5_fortran -lhdf5 std=f2008 -O3 -ffast-math -march=native -funroll-loops  
+COMOTT1 = -g -Wall -Wextra -Warray-temporaries -Wconversion -fimplicit-none -fbacktrace -fcheck=all -ffpe-trap=zero,overflow,underflow -finline-matmul-limit=0 -finit-real=zero -finit-logical=false -finit-integer=zero -mcmodel=medium -ffree-line-length-none -fallow-argument-mismatch -fconvert=swap -fdefault-real-8 -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_lp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl  -m64  -I"${MKLROOT}/include" -I${EBROOTNETCDFMINFORTRAN}/include -L${EBROOTNETCDFMINFORTRAN}/lib64 -lnetcdff -L${EBROOTNETCDF}/lib64 -L${EBROOTGCCCORE}/lib64 -L${EBROOTGCCCORE}/lib -lnetcdf -lnetcdf -ldl -lm -lm -lpthread -I${HDF5_DIR}/include -L${HDF5_DIR}/lib -lhdf5_fortran -lhdf5 -larpack #g  -Wall -fcheck=al -O3 -ffast-math -march=native -funroll-loops -fcheck=all -g -fbacktrace -O3 -ffast-math -funroll-loops
 #COMOTT1= -O3 -ffast-math -fdefault-integer-8 -ffree-line-length-512 -fallow-argument-mismatch -fbacktrace -fconvert=swap -fdefault-real-8 -larpack -DMKL_ILP64 -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_gf_ilp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread -lm -ldl -m64  -I"${MKLROOT}/include" -I${EBROOTNETCDFMINFORTRAN}/include -L${EBROOTNETCDFMINFORTRAN}/lib -lnetcdff -L${EBROOTNETCDF}/lib64 -L${EBROOTGCCCORE}/lib64 -L${EBROOTGCCCORE}/lib -lnetcdf -lnetcdf -ldl -lm -lm -lpthread -I${HDF5_DIR}/include -L${HDF5_DIR}/lib -lhdf5_fortran -lhdf5 std=f2008 -O3 -ffast-math -march=native -funroll-loops
 
 #COMOTT1= -O3 -ffast-math -fdefault-integer-8 -fallow-argument-mismatch -fbacktrace -fconvert=swap -fdefault-real-8 -DMKL_ILP64 -L/sw/eb/sw/arpack-ng/3.8.0-foss-2021a/lib64 -larpack -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_gf_ilp64.a ${MKLROOT}/lib/intel64/libmkl_sequential.a ${MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -lpthread -lm -ldl  -m64  -I"${MKLROOT}/include" -liomp5 -lpthread -lm -lmkl_gf_ilp64 -lmkl_intel_thread -lmkl_core -ffree-line-length-512 -I${EBROOTNETCDFMINFORTRAN}/include -L${EBROOTNETCDFMINFORTRAN}/lib -lnetcdff -L${EBROOTNETCDF}/lib64 -L${EBROOTGCCCORE}/lib64 -L${EBROOTGCCCORE}/lib -lnetcdf -lnetcdf -ldl -lm -lm -lpthread -I${HDF5_DIR}/include -L${HDF5_DIR}/lib -lhdf5_fortran -lhdf5#-fcheck=all -fbacktrace -fconvert=swap -fdefault-real-8 -larpack -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_gf_ilp64.a ${MKLROOT}/lib/intel64/libmkl_sequential.a ${MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -lpthread -lm -ldl  -m64  -I"${MKLROOT}/include" -liomp5 -lpthread -lm -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -ffree-line-length-512 -I${EBROOTNETCDFMINFORTRAN}/include -L${EBROOTNETCDFMINFORTRAN}/lib -lnetcdff -L${EBROOTNETCDF}/lib64 -L${EBROOTGCCCORE}/lib64 -L${EBROOTGCCCORE}/lib -lnetcdf -lnetcdf -ldl -lm -lm -lpthread -I${HDF5_DIR}/include -L${HDF5_DIR}/lib -lhdf5_fortran -lhdf5 -O3 -ffast-math -fallow-argument-mismatch -Wall -fcheck=all
@@ -18,6 +19,9 @@ COMOTT1 = -O3 -ffast-math -finline-matmul-limit=0 -finit-real=zero -finit-logica
  COMCONV2= #-convert big_endian
  COMCONV1= -fconvert=swap
 
+
+mod_files = $(date_time)/datetime_module.mod
+obj_files = $(date_time)/datetime_module.o
 
 ifeq ($(COMPILER),gcc2021)
         COMPILE=$(COMPILE1)
@@ -143,6 +147,7 @@ FILES= \
        mod_slab_ocean_reservoir.o \
        mod_io.o \
        speedy_res_interface.o \
+       datetime_module.o \
        parallelmain.o
 
 .SUFFIXES: .f .f90 .o
@@ -177,10 +182,12 @@ clean:
 
 move_mod: 
 	cp $(MKL_SPARSE_FILE) mkl_spblas.mod
+	cp $(mod_files) .
+	cp $(obj_files) .
 
 mod_utilities.o        : mod_utilities.f90
 stringtype.o           : stringtype.f90
-mod_calendar.o         : mod_calendar.f90 mod_utilities.o
+mod_calendar.o         : mod_calendar.f90 mod_utilities.o datetime_module.o
 mod_linalg.o           : mod_linalg.f90 mod_utilities.o
 res_domain.o           : res_domain.f90 mod_utilities.o
 mod_io.o               : mod_io.f90 mod_utilities.o res_domain.o stringtype.o

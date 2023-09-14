@@ -98,6 +98,9 @@ module mod_utilities
      !Index of precip in the mean and std arrays 
      integer :: precip_mean_std_idx
 
+     !Index of temporal encodings in the mean and std arrays
+     integer :: temp_enc_mean_std_idx
+
      !Index of oceanic heat content in the mean and std arrays
      integer :: ohtc_mean_std_idx
 
@@ -148,6 +151,10 @@ module mod_utilities
      !just the prediction region v(t)
      integer :: tisr_start
      integer :: tisr_end
+
+     !Temporal encoding indices
+     integer :: temp_enc_start
+     integer :: temp_enc_end
 
      !variables that need predicting indices in u(t) where u(atmos...logp...sst...sst_climo...tisr)
      !so if its a region that only predicts the atmosphere then it will be
@@ -279,6 +286,10 @@ module mod_utilities
     integer :: precip_size_res
     integer :: precip_size_input
 
+    
+    !Variables related to temporal encodings
+    logical :: temp_enc_bool
+    integer :: temp_enc_counter
 
 
     !Becase sst is a special 2d variable its is complicated
@@ -369,6 +380,9 @@ module mod_utilities
     real(kind=dp), allocatable :: full_sst(:,:,:)
 
     integer :: predictvars2d
+
+    !Holds temporal encodings
+    real(kind=dp), allocatable :: temp_enc(:,:)
   end type reservoir_type
 
   type model_parameters_type 
@@ -469,6 +483,9 @@ module mod_utilities
 
     !Transforming Precip into log space see Pathek et al 2022
     real :: precip_epsilon
+
+    !Temporal encodings
+    logical :: temp_enc_bool
 
     !stuff related to noise
     logical :: noisy !Flag to add noise

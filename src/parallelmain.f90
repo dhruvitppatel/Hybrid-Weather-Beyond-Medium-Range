@@ -4,7 +4,7 @@ program main
   use, intrinsic :: ieee_arithmetic
 
   use mod_io, only : write_netcdf_parallel_mpi_ocean
-  use mpires, only : mpi_res, startmpi, distribute_prediction_marker, killmpi, predictionmpicontroller, sendrecievegrid, send_outvec_ml_contrib, send_outvec_speedy_contrib
+  use mpires, only : mpi_res, startmpi, distribute_prediction_marker, killmpi, predictionmpicontroller, sendrecievegrid, send_outvec_ml_contrib, send_outvec_speedy_contrib, stop_mpi_safe
   use mod_reservoir, only : initialize_model_parameters, allocate_res_new, train_reservoir, start_prediction, initialize_prediction, predict, trained_reservoir_prediction, predict_ml
   use mod_slab_ocean_reservoir, only : initialize_slab_ocean_model, train_slab_ocean_model, get_training_data_from_atmo, initialize_prediction_slab, start_prediction_slab, predict_slab, predict_slab_ml, trained_ocean_reservoir_prediction
   use speedy_res_interface, only : startspeedy
@@ -139,7 +139,7 @@ program main
        endif 
      endif 
 
-  enddo 
+  enddo
   endif 
   !If we already trained and are just reading in files then we go here 
   if(trained_model) then

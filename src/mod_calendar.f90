@@ -21,72 +21,52 @@ module mod_calendar
        datetime%starthour = starthour
     end subroutine 
 
-    subroutine get_current_time_delta_hour(datetime,hours_elapsed)
+    subroutine get_current_time_delta_hour(dt_calendar,hours_elapsed)
        !Takes an initialized calendar_type object and updates the current date
        !variables
-       type(calendar_type), intent(inout)  :: datetime
+       use datetime_module, only : timedelta, datetime
+
+       type(calendar_type), intent(inout)  :: dt_calendar
        integer, intent(in)                 :: hours_elapsed
 
-       !Local stuff
-       integer               :: years_elasped, months_elapsed, days_elapsed, day_of_year
-       integer               :: month, day_while_counter, leap_days
-       integer               :: i
-       integer, parameter    :: hours_in_year=8760 !Average number of hours in a year (includes leap year)
+       type(datetime) :: startdate, enddate
+       type(timedelta) :: timedelta_obj
 
-       integer, parameter    :: hours_in_a_day=24
+       startdate = datetime(dt_calendar%startyear,dt_calendar%startmonth,dt_calendar%startday,dt_calendar%starthour)
 
-       logical               :: is_leap_year
-       !365-day calendar
-       integer :: ncal365(12) = (/ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31,&
-                                 30, 31 /)
+       timedelta_obj = timedelta(hours=hours_elapsed)
 
-       !Get the new year first
-       years_elasped = hours_elapsed/hours_in_year
+       enddate = startdate + timedelta_obj
 
-       datetime%currentyear = years_elasped + datetime%startyear
+       dt_calendar%currentyear  = enddate%getYear()
+       dt_calendar%currentmonth = enddate%getMonth()
+       dt_calendar%currentday   = enddate%getDay()
+       dt_calendar%currenthour  = enddate%getHour()
 
-       !We need to get the leap years between start and now
-       leap_days = 0
-       do i=0,years_elasped - 1 
-          call leap_year_check(datetime%startyear+i,is_leap_year)
-          if(is_leap_year) then
-            leap_days = leap_days + 1
-          endif 
-       end do 
+       return
+    end subroutine
 
-       !Lets find what day we are in the year
-       call leap_year_check(datetime%currentyear,is_leap_year)
-    
-       day_of_year = (mod(hours_elapsed,hours_in_year)/hours_in_a_day) - leap_days
-       if(is_leap_year) then
-          ncal365(2) = 29
-       end if
+    subroutine get_current_time_delta_hour_from_current(dt_calendar,hours_elapsed)
+       !Takes an initialized calendar_type object and updates the current date
+       !variables
+       use datetime_module, only : timedelta, datetime
 
-       day_while_counter = day_of_year
-       month = 1
-       do while(day_while_counter > 0)
-          day_while_counter = day_while_counter - ncal365(month)
-          month = month + 1
-       end do
+       type(calendar_type), intent(inout)  :: dt_calendar
+       integer, intent(in)                 :: hours_elapsed
 
-       month = month - 1
+       type(datetime) :: startdate, enddate
+       type(timedelta) :: timedelta_obj
 
-       if(month <= 0) then
-         month = 12
-         datetime%currentyear = datetime%currentyear - 1
-       endif 
+       startdate = datetime(dt_calendar%currentyear,dt_calendar%currentmonth,dt_calendar%currentday,dt_calendar%currenthour)
 
-       months_elapsed = month 
+       timedelta_obj = timedelta(hours=hours_elapsed)
 
-       !Set the new month
-       datetime%currentmonth = months_elapsed
+       enddate = startdate + timedelta_obj
 
-       !Get day of month
-       days_elapsed = ncal365(month) + day_while_counter
-       datetime%currentday = days_elapsed
-
-       !Get hour of day 
-       datetime%currenthour = mod(hours_elapsed,hours_in_a_day)
+       dt_calendar%currentyear  = enddate%getYear()
+       dt_calendar%currentmonth = enddate%getMonth()
+       dt_calendar%currentday   = enddate%getDay()
+       dt_calendar%currenthour  = enddate%getHour()
 
        return
     end subroutine
@@ -131,47 +111,21 @@ module mod_calendar
     end subroutine
 
     subroutine numof_hours_into_year(year,month,day,hour,numofhours)
-      !Get the number of hours you are into the year assumes you start of jan 1 of year 
+      !Get the number of hours you are into the year assumes you start of jan 1 of year  
+      use datetime_module, only : timedelta, datetime
+
       integer, intent(in)   :: year,month,day,hour
       integer, intent(out)  :: numofhours
 
-      integer               :: months_elapsed, i
+      type (datetime) :: start_of_year, current_date
+      type (timedelta) :: t
+ 
+      current_date = datetime(year,month,day,hour)
+      start_of_year = datetime(current_date%getYear(), 1, 1, 0)
 
-      logical               :: is_leap_year
+      t = current_date - start_of_year
 
-      integer :: ncal365(12) = (/ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31,&
-                                  30, 31 /)
-
-      integer :: ncal_leap(12) = (/ 31, 29, 31, 30, 31, 30, 31, 31, 30, 31,&
-                                    30, 31 /)
-
-      months_elapsed = month 
-      
-      numofhours = 0
-      call leap_year_check(year,is_leap_year)
-      !Loop through months
-      if (months_elapsed > 1) then
-         do i=1,months_elapsed-1
-            if(is_leap_year) then 
-               numofhours = numofhours + 24*ncal_leap(i)
-            else
-               numofhours = numofhours + 24*ncal365(i) 
-            endif 
-         enddo 
-      endif 
-
-      !Loop through days 
-      if(day > 1) then 
-        do i=1,day-1
-           numofhours = numofhours + 24
-        enddo
-      endif
-       
-      numofhours =  numofhours+hour
-
-      if(numofhours == 0) then
-        numofhours = 1
-      endif 
+      numofhours = int(t%total_seconds()/3600) + 1
     end subroutine
 
     subroutine time_delta_between_two_dates(start_year,start_month,start_day,start_hour,end_year,end_month,end_day,end_hour,numofhours)

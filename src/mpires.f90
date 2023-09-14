@@ -397,6 +397,7 @@ module mpires
         endif
 
         call MPI_Barrier(mpi_res%mpi_world, mpi_res%ierr)
+        !print *, 'Made it to: all non-root nodes sent outvec data to root node'
         
         if((mpi_res%is_root)) then
           do proc_num=1,mpi_res%numprocs-1
@@ -585,19 +586,31 @@ module mpires
           call write_truth_data(res,timestep)
         endif
 
+        call MPI_Barrier(mpi_res%mpi_world, mpi_res%ierr)
+        !print *, 'Made it past write_truth_data in mpires'
+
       
         if(mpi_res%is_root) then
            do i=1, res%model_parameters%num_of_regions_on_proc
               do j=1, res%model_parameters%num_vert_levels
 
                  !print *, 'tile_4d_and_logp_to_local_state_input root'
-                 
-                 call tile_4d_and_logp_to_local_state_input(res%model_parameters,res%model_parameters%region_indices(i),j,wholegrid4d,wholegrid2d,wholegrid_precip,res%reservoir(i,j)%feedback(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input))
+                
+                 if(res%reservoir(i,j)%temp_enc_bool) then
+                   call tile_4d_and_logp_to_local_state_input(res%model_parameters,res%model_parameters%region_indices(i),j,wholegrid4d,wholegrid2d,wholegrid_precip,res%reservoir(i,j)%feedback(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input-2))
+                 else 
+                   call tile_4d_and_logp_to_local_state_input(res%model_parameters,res%model_parameters%region_indices(i),j,wholegrid4d,wholegrid2d,wholegrid_precip,res%reservoir(i,j)%feedback(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input))
+                 endif
 
                  if(.not. res%model_parameters%ml_only) then
                    call tile_4d_and_logp_full_grid_to_local_res_vec(res%model_parameters,res%model_parameters%region_indices(i),j,forecast_4d,forecast_2d,res%reservoir(i,j)%local_model)
 
                    call standardize_state_vec_res(res%reservoir(i,j),res%grid(i,j),res%reservoir(i,j)%local_model)
+                 endif
+
+                 if(res%reservoir(i,j)%temp_enc_bool) then
+                   res%reservoir(i,j)%feedback(res%grid(i,j)%temp_enc_start:res%grid(i,j)%temp_enc_end) = res%reservoir(i,j)%temp_enc(:,res%reservoir(i,j)%temp_enc_counter)
+                   res%reservoir(i,j)%temp_enc_counter = res%reservoir(i,j)%temp_enc_counter + 1
                  endif 
 
                  if(ocean_model) then 
@@ -686,6 +699,7 @@ module mpires
         endif 
         
         call MPI_Barrier(mpi_res%mpi_world, mpi_res%ierr)
+        !print *, 'Made it past MPI_Send in mpires'
 
         if(.not.(mpi_res%is_root)) then
           counter = 1
@@ -701,7 +715,13 @@ module mpires
 
                 call MPI_RECV(sendreceivedata,receive_size,MPI_DOUBLE_PRECISION,from,tag,mpi_res%mpi_world,MPI_STATUS_IGNORE,mpi_res%ierr)
 
-                res%reservoir(i,j)%feedback(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input) = sendreceivedata
+                if(res%reservoir(i,j)%temp_enc_bool) then
+                   res%reservoir(i,j)%feedback(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input-2) = sendreceivedata
+                   res%reservoir(i,j)%feedback(res%grid(i,j)%temp_enc_start:res%grid(i,j)%temp_enc_end) = res%reservoir(i,j)%temp_enc(:,res%reservoir(i,j)%temp_enc_counter)
+                   res%reservoir(i,j)%temp_enc_counter = res%reservoir(i,j)%temp_enc_counter + 1
+                else
+                   res%reservoir(i,j)%feedback(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input) = sendreceivedata
+                endif
 
                 deallocate(sendreceivedata)
 
@@ -916,6 +936,7 @@ module mpires
            arraysize = arraysize + localinputxchunk*localinputychunk
          endif 
        endif 
+
        !print *, 'arraysize',arraysize
      end subroutine
 
@@ -939,7 +960,7 @@ module mpires
        if(model_parameters%ohtc_bool_input) then
          arraysize = arraysize + localinputxchunk*localinputychunk
        endif
-
+ 
      end subroutine
 
                
@@ -1029,11 +1050,19 @@ module mpires
                  allocate(temp4d(res%reservoir(i,j)%local_predictvars,res%grid(i,j)%resxchunk,res%grid(i,j)%resychunk,res%reservoir(i,j)%local_heightlevels_res))
                  allocate(temp2d(res%grid(i,j)%resxchunk,res%grid(i,j)%resychunk))
 
-                 allocate(copy_truth_vec(res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input))
+                 if(res%reservoir(i,j)%temp_enc_bool) then
+                   allocate(copy_truth_vec(res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-2))
+                 else
+                   allocate(copy_truth_vec(res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input))
+                 endif
 
                  !print *, 'shape(res%reservoir(i,j)%predictiondata)',shape(res%reservoir(i,j)%predictiondata)
                  !print *, 'res%model_parameters%synclength/res%model_parameters%timestep+timestep',res%model_parameters%synclength/res%model_parameters%timestep+timestep
-                 copy_truth_vec = res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%sst_size_input-res%reservoir(i,j)%tisr_size_input,res%model_parameters%synclength/res%model_parameters%timestep+timestep)
+                 if(res%reservoir(i,j)%temp_enc_bool) then
+                   copy_truth_vec = res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%sst_size_input-res%reservoir(i,j)%tisr_size_input-2,res%model_parameters%synclength/res%model_parameters%timestep+timestep)
+                 else 
+                   copy_truth_vec = res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%sst_size_input-res%reservoir(i,j)%tisr_size_input,res%model_parameters%synclength/res%model_parameters%timestep+timestep)
+                 endif
                  call unstandardize_state_vec_input(res%reservoir(i,j),res%grid(i,j),copy_truth_vec)
 
                  call tile_4d_and_logp_state_vec_input_to_local_grids(res%model_parameters,copy_truth_vec,res%model_parameters%region_indices(i),j,temp4d,temp2d)
@@ -1053,6 +1082,7 @@ module mpires
         tag2 = 12
 
         call MPI_Barrier(mpi_res%mpi_world, mpi_res%ierr)
+        !print *, 'mpires.write_truth_data. Made it past first tiling to grid.'
         !TODO instead of doing the do loop then the if statement try
         !if(mpi_res%is_root) loop over all workers
         !else send data
@@ -1061,11 +1091,23 @@ module mpires
         if(.not.(mpi_res%is_root)) then
            do i=1, res%model_parameters%num_of_regions_on_proc
               do j=1, res%model_parameters%num_vert_levels
-                 local_domain_size = size(res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input,res%model_parameters%synclength/res%model_parameters%timestep+timestep))
+                 if(res%reservoir(i,j)%temp_enc_bool) then
+                   local_domain_size = size(res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input-2,res%model_parameters%synclength/res%model_parameters%timestep+timestep)) 
+                 else
+                   local_domain_size = size(res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input,res%model_parameters%synclength/res%model_parameters%timestep+timestep))
+                 endif
 
-                 allocate(copy_truth_vec(res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input))
+                 if(res%reservoir(i,j)%temp_enc_bool) then
+                   allocate(copy_truth_vec(res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input-2))
+                 else
+                   allocate(copy_truth_vec(res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input))
+                 endif
 
-                 copy_truth_vec = res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input,res%model_parameters%synclength/res%model_parameters%timestep+timestep)
+                 if(res%reservoir(i,j)%temp_enc_bool) then
+                   copy_truth_vec = res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input-2,res%model_parameters%synclength/res%model_parameters%timestep+timestep) 
+                 else
+                   copy_truth_vec = res%reservoir(i,j)%predictiondata(1:res%reservoir(i,j)%reservoir_numinputs-res%reservoir(i,j)%tisr_size_input-res%reservoir(i,j)%sst_size_input,res%model_parameters%synclength/res%model_parameters%timestep+timestep)
+                 endif
                  call unstandardize_state_vec_input(res%reservoir(i,j),res%grid(i,j),copy_truth_vec) 
 
                  allocate(sendreceivedata(local_domain_size))
@@ -1092,6 +1134,7 @@ module mpires
         endif
 
         call MPI_Barrier(mpi_res%mpi_world, mpi_res%ierr)
+        !print *, 'mpires.write_truth_data. Made it past sending data to root.'
 
         if((mpi_res%is_root)) then
           do proc_num=1,mpi_res%numprocs-1
