@@ -241,6 +241,8 @@ module mod_utilities
     real(kind=dp), allocatable :: states_x_states_aug(:,:)
     real(kind=dp), allocatable :: states_x_trainingdata_aug(:,:)
 
+    !input pass-through
+    logical :: inputpassthru_bool
 
     !Local num of height levels and variables predicted per level
     !may change on level and processor.
@@ -424,6 +426,8 @@ module mod_utilities
     integer, allocatable       :: prediction_markers(:)
     integer                    :: num_predictions
     integer                    :: current_trial_number
+
+    logical                    :: inputpassthru_bool
 
     !mpi stuff
     integer :: irank
