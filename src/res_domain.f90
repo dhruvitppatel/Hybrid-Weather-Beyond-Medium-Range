@@ -671,7 +671,9 @@ module resdomain
 
            temp4d = reshape(statevec(1:reservoir%local_predictvars*grid%inputxchunk*grid%inputychunk*reservoir%local_heightlevels_input),(/reservoir%local_predictvars,grid%inputxchunk,grid%inputychunk,reservoir%local_heightlevels_input/))
 
-           temp2d = reshape(statevec(reservoir%local_predictvars*grid%inputxchunk*grid%inputychunk*reservoir%local_heightlevels_input+1:reservoir%reservoir_numinputs-reservoir%tisr_size_input),(/grid%inputxchunk,grid%inputychunk/))
+           !temp2d = reshape(statevec(reservoir%local_predictvars*grid%inputxchunk*grid%inputychunk*reservoir%local_heightlevels_input+1:reservoir%reservoir_numinputs-reservoir%tisr_size_input),(/grid%inputxchunk,grid%inputychunk/))
+ 
+           temp2d = reshape(statevec(grid%logp_start:grid%logp_end),(/grid%inputxchunk,grid%inputychunk/))
 
            tiledstatevec(1:reservoir%local_predictvars*grid%resxchunk*grid%resychunk*reservoir%local_heightlevels_res) = reshape(temp4d(:,grid%tdata_xstart:grid%tdata_xend,grid%tdata_ystart:grid%tdata_yend,grid%tdata_zstart:grid%tdata_zend),(/reservoir%local_predictvars*grid%resxchunk*grid%resychunk*reservoir%local_heightlevels_res/))
            tiledstatevec(reservoir%local_predictvars*grid%resxchunk*grid%resychunk*reservoir%local_heightlevels_res+1:reservoir%local_predictvars*grid%resxchunk*grid%resychunk*reservoir%local_heightlevels_res+grid%resxchunk*grid%resychunk) = reshape(temp2d(grid%tdata_xstart:grid%tdata_xend,grid%tdata_ystart:grid%tdata_yend),(/grid%resxchunk*grid%resychunk/))

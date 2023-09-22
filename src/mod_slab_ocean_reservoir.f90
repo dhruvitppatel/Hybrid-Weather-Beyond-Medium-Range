@@ -1085,6 +1085,7 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
    real(kind=dp), allocatable :: trainingdata_noisy(:,:), trainingdata_noisy_temp(:)
 
    allocate(temp(reservoir%n),x(reservoir%n),x_(reservoir%n),y(reservoir%n))
+   if(reservoir%inputpassthru_bool) allocate(trainingdata_noisy_temp(size(trainingdata,1)))
 
    x = 0
    y = 0
