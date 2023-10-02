@@ -53,7 +53,9 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
   
   reservoir%ohtc_prediction = .True.
 
-  reservoir%temp_enc_bool = .False.
+  reservoir%temp_enc_bool = .False. !.True.
+
+  reservoir%inputpassthru_bool = .False. !.True.
 
   reservoir%num_atmo_levels = 1!grid%inputzchunk
 
@@ -1080,15 +1082,18 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
    real(kind=dp), allocatable :: temp(:),x(:),y(:),x_(:)
    real(kind=dp), parameter   :: alpha=1.0,beta=0.0
    real(kind=dp), allocatable :: gaussian_noise
+   real(kind=dp), allocatable :: trainingdata_noisy(:,:), trainingdata_noisy_temp(:)
 
    allocate(temp(reservoir%n),x(reservoir%n),x_(reservoir%n),y(reservoir%n))
+   if(reservoir%inputpassthru_bool) allocate(trainingdata_noisy_temp(size(trainingdata,1)))
 
    x = 0
    y = 0
    do i=1, model_parameters%discardlength/model_parameters%timestep_slab
       info = MKL_SPARSE_D_MV(SPARSE_OPERATION_NON_TRANSPOSE,alpha,reservoir%cooA,reservoir%descrA,x,beta,y)
       !print *, 'shape(reservoir%win)',shape(reservoir%win),'shape(trainingdata(:,i))',shape(trainingdata(:,i)), 'worker',reservoir%assigned_region
-      temp = matmul(reservoir%win,gaussian_noise_1d_function(trainingdata(:,i),reservoir%noisemag))
+      trainingdata_noisy_temp = gaussian_noise_1d_function(trainingdata(:,i),reservoir%noisemag)
+      temp = matmul(reservoir%win,trainingdata_noisy_temp)
       
       x_ = tanh(y+temp)
 
@@ -1104,6 +1109,9 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
 
    training_length = size(trainingdata,2) - model_parameters%discardlength/model_parameters%timestep_slab
 
+   allocate(trainingdata_noisy(size(trainingdata,1),reservoir%batch_size))
+   trainingdata_noisy(:,1) = trainingdata_noisy_temp
+
    do i=1, training_length-1
       if(reservoir%assigned_region == 1) print *, 'i',i,'batch size',reservoir%batch_size, 'training_length-1',training_length-1,'ize(trainingdata,2)',size(trainingdata,2)
       if(mod(i+1,reservoir%batch_size).eq.0) then
@@ -1111,7 +1119,9 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
         batch_number = batch_number + 1
 
         info = MKL_SPARSE_D_MV(SPARSE_OPERATION_NON_TRANSPOSE,alpha,reservoir%cooA,reservoir%descrA,reservoir%states(:,mod(i,reservoir%batch_size)),beta,y)
-        temp = matmul(reservoir%win,gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag))
+        trainingdata_noisy(:,reservoir%batch_size) = gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag)
+
+        temp = matmul(reservoir%win,trainingdata_noisy(:,reservoir%batch_size))
 
         x_ = tanh(y+temp)
         x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
@@ -1122,13 +1132,20 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
 
         reservoir%states(2:reservoir%n:2,:) = reservoir%states(2:reservoir%n:2,:)**2
 
-        call chunking_matmul_ml(reservoir,model_parameters,grid,batch_number,trainingdata)
+        if(reservoir%inputpassthru_bool) then
+          call chunking_matmul_ml(reservoir,model_parameters,grid,batch_number,trainingdata,trainingdata_noisy)
+        else
+          call chunking_matmul_ml(reservoir,model_parameters,grid,batch_number,trainingdata)
+        endif
 
       elseif (mod(i,reservoir%batch_size).eq.0) then
         print *,'new state',i, 'region',reservoir%assigned_region
 
         info = MKL_SPARSE_D_MV(SPARSE_OPERATION_NON_TRANSPOSE,alpha,reservoir%cooA,reservoir%descrA,reservoir%states(:,reservoir%batch_size),beta,y)
-        temp = matmul(reservoir%win,gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag)) 
+        
+        trainingdata_noisy(:,1) = gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag) 
+ 
+        temp = matmul(reservoir%win,trainingdata_noisy(:,1))
          
         x_ = tanh(y+temp)
         x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
@@ -1136,7 +1153,9 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
         reservoir%states(:,1) = x
       else 
         info = MKL_SPARSE_D_MV(SPARSE_OPERATION_NON_TRANSPOSE,alpha,reservoir%cooA,reservoir%descrA,reservoir%states(:,mod(i,reservoir%batch_size)),beta,y)
-        temp = matmul(reservoir%win,gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag))
+        trainingdata_noisy(:,mod(i+1,reservoir%batch_size)) = gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag)
+
+        temp = matmul(reservoir%win,trainingdata_noisy(:,mod(i+1,reservoir%batch_size)))
 
         x_ = tanh(y+temp)
         x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
@@ -1146,6 +1165,8 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
 
       y = 0
    enddo
+
+   deallocate(trainingdata_noisy)
    
    return
 end subroutine
@@ -1284,6 +1305,11 @@ subroutine fit_chunk_ml(reservoir,model_parameters,grid)
     do i=1, reservoir%n
          reservoir%states_x_states_aug(i,i) = reservoir%states_x_states_aug(i,i) + reservoir%beta_res
     enddo
+    if(reservoir%inputpassthru_bool) then
+       do i=reservoir%n+1,reservoir%n+reservoir%chunk_size_prediction
+          reservoir%states_x_states_aug(i,i) = reservoir%states_x_states_aug(i,i) + reservoir%beta_res
+       enddo
+    endif
 
     !NOTE moving to mldivide not using pinv anymore
     print *, 'trying mldivide'
@@ -1496,6 +1522,12 @@ subroutine synchronize_error_unnoisysync(reservoir,model_parameters,grid,input,x
     allocate(prediction(size(targetdata,1),length+1))
     prediction(:,1) = targetdata(:,1)
 
+    if(reservoir%inputpassthru_bool) then
+      allocate(x_augment(reservoir%n+reservoir%chunk_size_prediction))
+    else
+      allocate(x_augment(reservoir%n))
+    endif
+
     do i=1, length
        info = MKL_SPARSE_D_MV(SPARSE_OPERATION_NON_TRANSPOSE,alpha,reservoir%cooA,reservoir%descrA,x,beta,y)
 
@@ -1504,9 +1536,12 @@ subroutine synchronize_error_unnoisysync(reservoir,model_parameters,grid,input,x
        x_ = tanh(y+temp)
        x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
-       x_augment = x
+       x_augment(1:reservoir%n) = x
        x_augment(2:reservoir%n:2) = x_augment(2:reservoir%n:2)**2
-
+       if(reservoir%inputpassthru_bool) then
+         x_augment(reservoir%n+1:reservoir%n+reservoir%chunk_size_prediction) = targetdata(:,i) !input(:,i)
+       endif
+       
        prediction(:,i+1) = matmul(reservoir%wout,x_augment)
     enddo
 
@@ -1594,6 +1629,12 @@ subroutine synchronize_error_sync(reservoir,model_parameters,grid,input,x,length
     call tile_full_input_to_target_data_ocean_model(reservoir,grid,input,targetdata)
 
     allocate(prediction(size(targetdata,1),length+1))
+    if(reservoir%inputpassthru_bool) then
+      allocate(x_augment(reservoir%n+reservoir%chunk_size_prediction))
+    else
+      allocate(x_augment(reservoir%n))
+    endif
+
     prediction(:,1) = targetdata(:,1)
 
     do i=1, length
@@ -1604,8 +1645,11 @@ subroutine synchronize_error_sync(reservoir,model_parameters,grid,input,x,length
        x_ = tanh(y+temp)
        x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
-       x_augment = x
+       x_augment(1:reservoir%n) = x
        x_augment(2:reservoir%n:2) = x_augment(2:reservoir%n:2)**2
+       if(reservoir%inputpassthru_bool) then
+         x_augment(reservoir%n+1:reservoir%n+reservoir%chunk_size_prediction) = targetdata(:,i) !input(:,i)
+       endif
 
        prediction(:,i+1) = matmul(reservoir%wout,x_augment)
     enddo
@@ -1714,7 +1758,7 @@ end subroutine
 
 subroutine predict_slab_ml(reservoir,model_parameters,grid,x)
     use mpires, only : predictionmpicontroller
-    use resdomain, only : unstandardize_state_vec_res
+    use resdomain, only : unstandardize_state_vec_res, tile_full_input_to_target_data_ocean_model
     use mod_utilities, only : e_constant
 
     type(reservoir_type), intent(inout)     :: reservoir
@@ -1723,7 +1767,7 @@ subroutine predict_slab_ml(reservoir,model_parameters,grid,x)
 
     real(kind=dp), intent(inout) :: x(:)
 
-    real(kind=dp), allocatable :: y(:), temp(:), x_(:)
+    real(kind=dp), allocatable :: y(:), temp(:), x_(:), target_temp(:)
     real(kind=dp), allocatable :: x_temp(:),x_augment(:)
 
     real(kind=dp), parameter :: alpha=1.0,beta=0.0
@@ -1731,7 +1775,11 @@ subroutine predict_slab_ml(reservoir,model_parameters,grid,x)
     integer :: info,i,j
 
     allocate(y(reservoir%n),temp(reservoir%n),x_(reservoir%n))
-    allocate(x_augment(reservoir%n))!reservoir%chunk_size_prediction))
+    if(reservoir%inputpassthru_bool) then
+      allocate(x_augment(reservoir%n+reservoir%chunk_size_prediction))
+    else
+      allocate(x_augment(reservoir%n))!reservoir%chunk_size_prediction))
+    endif
 
     y = 0
 
@@ -1745,6 +1793,11 @@ subroutine predict_slab_ml(reservoir,model_parameters,grid,x)
     x_temp(2:reservoir%n:2) = x_temp(2:reservoir%n:2)**2
 
     x_augment(1:reservoir%n) = x_temp
+    if(reservoir%inputpassthru_bool) then
+      call tile_full_input_to_target_data_ocean_model(reservoir,grid,reservoir%feedback,target_temp)
+      x_augment(reservoir%n+1:reservoir%n+reservoir%chunk_size_prediction) = target_temp !reservoir%feedback
+      deallocate(target_temp)
+    endif
 
     reservoir%outvec = matmul(reservoir%wout,x_augment)
 
@@ -1804,10 +1857,17 @@ subroutine initialize_chunk_training(reservoir,model_parameters)
    print *, 'num_of_batches,reservoir%traininglength,reservoir%batch_size slab',num_of_batches,model_parameters%traininglength,reservoir%batch_size
 
    !Should be reservoir%n+ reservoir%chunk_size
-   allocate(reservoir%states_x_trainingdata_aug(reservoir%chunk_size_prediction,reservoir%n+reservoir%chunk_size_speedy))
-   allocate(reservoir%states_x_states_aug(reservoir%n+reservoir%chunk_size_speedy,reservoir%n+reservoir%chunk_size_speedy))
+   if(reservoir%inputpassthru_bool) then
+     allocate(reservoir%states_x_trainingdata_aug(reservoir%chunk_size_prediction,reservoir%n+reservoir%chunk_size_speedy+reservoir%chunk_size_prediction))
+     allocate(reservoir%states_x_states_aug(reservoir%n+reservoir%chunk_size_speedy+reservoir%chunk_size_prediction,reservoir%n+reservoir%chunk_size_speedy+reservoir%chunk_size_prediction))
+     allocate(reservoir%augmented_states(reservoir%n+reservoir%chunk_size_speedy+reservoir%chunk_size_prediction,reservoir%batch_size))
+   else
+     allocate(reservoir%states_x_trainingdata_aug(reservoir%chunk_size_prediction,reservoir%n+reservoir%chunk_size_speedy))
+     allocate(reservoir%states_x_states_aug(reservoir%n+reservoir%chunk_size_speedy,reservoir%n+reservoir%chunk_size_speedy))
+     allocate(reservoir%augmented_states(reservoir%n+reservoir%chunk_size_speedy,reservoir%batch_size))
+   endif
+
    allocate(reservoir%states(reservoir%n,reservoir%batch_size))
-   allocate(reservoir%augmented_states(reservoir%n+reservoir%chunk_size_speedy,reservoir%batch_size))
    allocate(reservoir%saved_state(reservoir%n))
 
    reservoir%states_x_trainingdata_aug = 0.0_dp
@@ -1817,7 +1877,7 @@ subroutine initialize_chunk_training(reservoir,model_parameters)
 
 end subroutine
 
-subroutine chunking_matmul_ml(reservoir,model_parameters,grid,batch_number,trainingdata)
+subroutine chunking_matmul_ml(reservoir,model_parameters,grid,batch_number,trainingdata,trainingdata_noisy)
    use mod_utilities, only : gaussian_noise
    use resdomain, only : tile_full_input_to_target_data_ocean_model
    use mpires
@@ -1826,19 +1886,26 @@ subroutine chunking_matmul_ml(reservoir,model_parameters,grid,batch_number,train
    type(model_parameters_type), intent(in) :: model_parameters
    type(grid_type), intent(in)             :: grid
 
-   integer, intent(in)          :: batch_number
+   integer, intent(in)                 :: batch_number
 
-   real(kind=dp), intent(in)    :: trainingdata(:,:)
+   real(kind=dp), intent(in)           :: trainingdata(:,:)
+   real(kind=dp), intent(in), optional :: trainingdata_noisy(:,:)
 
-   real(kind=dp), allocatable   :: temp(:,:), targetdata(:,:)
-   real(kind=dp), parameter     :: alpha=1.0, beta=0.0
+   real(kind=dp), allocatable          :: temp(:,:), targetdata(:,:)
+   real(kind=dp), parameter            :: alpha=1.0, beta=0.0
 
-   integer                      :: n, m, l
+   integer                             :: n, m, l
 
    n = size(reservoir%augmented_states,1)
    m = size(reservoir%augmented_states,2)
 
    reservoir%augmented_states(1:reservoir%n,:) = reservoir%states
+ 
+   if(reservoir%inputpassthru_bool) then
+     call tile_full_input_to_target_data_ocean_model(reservoir,grid,trainingdata_noisy,targetdata) 
+     reservoir%augmented_states(reservoir%n+1:n,:) = targetdata !trainingdata_noisy  
+     deallocate(targetdata)
+   endif
 
    call tile_full_input_to_target_data_ocean_model(reservoir,grid,trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+(batch_number-1)*m+1:batch_number*m+model_parameters%discardlength/model_parameters%timestep_slab),targetdata)
    print *, 'slab targetdata(:,20) ', targetdata(:,20)
@@ -1989,6 +2056,7 @@ subroutine trained_ocean_reservoir_prediction(reservoir,model_parameters,grid,re
    endif
 
    reservoir%temp_enc_bool = model_parameters%temp_enc_bool
+   reservoir%inputpassthru_bool = model_parameters%inputpassthru_bool
 
    if(reservoir%sst_bool_prediction) then
 

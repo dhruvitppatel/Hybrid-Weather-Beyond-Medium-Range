@@ -199,6 +199,7 @@ module mod_utilities
     real(kind=dp)              :: deg
     real(kind=dp)              :: radius
     real(kind=dp)              :: beta_res !reservoir ridge regression parameter
+    real(kind=dp)              :: beta_inputpassthru !inputpassthru ridge regression parameter
     real(kind=dp)              :: beta_model !model ridge regression parameter
     real(kind=dp)              :: density
 
@@ -241,6 +242,11 @@ module mod_utilities
     real(kind=dp), allocatable :: states_x_states_aug(:,:)
     real(kind=dp), allocatable :: states_x_trainingdata_aug(:,:)
 
+    !input pass-through
+    logical :: inputpassthru_bool
+
+    !training on SPEEDY model tendencies
+    logical :: train_tendencies_bool
 
     !Local num of height levels and variables predicted per level
     !may change on level and processor.
@@ -358,6 +364,9 @@ module mod_utilities
 
     !The value of the prior [0,1]
     real(kind=dp) :: prior_val
+
+    !The value of inputpassthrough prior 
+    real(kind=dp) :: prior_val_inputpassthru
    
     !Current local speedy state
     real(kind=dp), allocatable :: local_model(:)
@@ -425,6 +434,10 @@ module mod_utilities
     integer                    :: num_predictions
     integer                    :: current_trial_number
 
+    logical                    :: inputpassthru_bool
+
+    logical                    :: train_tendencies_bool
+
     !mpi stuff
     integer :: irank
     integer :: numprocs
@@ -465,6 +478,9 @@ module mod_utilities
 
     !Boolean saying if we are using a prior or not
     logical :: using_prior
+
+    !Boolen saying if we are using a prior for the input pass through
+    logical :: using_prior_inputpassthru
 
     !Noise to be added to the imperfect model states
     real(kind=dp) :: model_noise
