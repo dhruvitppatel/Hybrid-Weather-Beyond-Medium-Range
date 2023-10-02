@@ -53,9 +53,9 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
   
   reservoir%ohtc_prediction = .True.
 
-  reservoir%temp_enc_bool = .False.
+  reservoir%temp_enc_bool = .False. !.True.
 
-  reservoir%inputpassthru_bool = .False. ! .True.
+  reservoir%inputpassthru_bool = .False. !.True.
 
   reservoir%num_atmo_levels = 1!grid%inputzchunk
 
