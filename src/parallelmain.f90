@@ -83,10 +83,10 @@ program main
   !Finally we train the reservoir in the subroutine train_reservoir
 
   !Loop 1: Loop over all sub domains (regions) on each processor
-  do i=1,res%model_parameters%num_of_regions_on_proc
+  do i=1, res%model_parameters%num_of_regions_on_proc
 
      !Loop 2: Loop over each vertical level for a particular sub domain 
-     do j=1,res%model_parameters%num_vert_levels
+     do j=1, res%model_parameters%num_vert_levels
 
         call initializedomain(res%model_parameters%number_of_regions,res%model_parameters%region_indices(i), & 
                               res%model_parameters%overlap,res%model_parameters%num_vert_levels,j,res%model_parameters%vert_loc_overlap, &

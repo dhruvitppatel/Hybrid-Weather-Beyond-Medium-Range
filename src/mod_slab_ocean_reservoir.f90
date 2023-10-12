@@ -55,6 +55,8 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
 
   reservoir%temp_enc_bool = .False. !.True.
 
+  reservoir%tanh_lin_mix_bool = .True.
+
   reservoir%inputpassthru_bool = .False. !.True.
 
   reservoir%num_atmo_levels = 1!grid%inputzchunk
@@ -428,7 +430,8 @@ subroutine get_training_data_from_atmo(reservoir,model_parameters,grid,reservoir
      reservoir%ohtc_prediction = .False.
    endif 
  
-   reservoir%temp_enc_bool = model_parameters%temp_enc_bool   
+   reservoir%temp_enc_bool = model_parameters%temp_enc_bool  
+   reservoir%tanh_lin_mix_bool = model_parameters%tanh_lin_mix_bool 
  
    !Parallel IO requires all of the cpus to call this function 
    if(model_parameters%ohtc_bool_input) then
@@ -586,6 +589,8 @@ subroutine get_prediction_data_from_atmo(reservoir,model_parameters,grid,reservo
 
    real(kind=dp), allocatable :: temp(:,:), ohtc_var(:,:,:)
 
+   integer :: i, j
+
 
     !Parallel IO requires all of the cpus to call this function
    if(model_parameters%ohtc_bool_input) then
@@ -651,6 +656,13 @@ subroutine get_prediction_data_from_atmo(reservoir,model_parameters,grid,reservo
 
        !reservoir%predictiondata(grid%ohtc_start:grid%ohtc_end,:) = reshape(ohtc_var(:,:,1:size(ohtc_var,3):model_parameters%timestep_slab),(/reservoir%ohtc_input_size,size(reservoir%predictiondata,2)/))
      endif
+
+     !!STARTING FROM REST OCEAN.
+     !reservoir%predictiondata = 0.0_dp * reservoir%predictiondata
+     !j = grid%inputxchunk*grid%inputychunk
+     !do i = 1,2
+     !   reservoir%predictiondata(j+(i-1)*grid%inputxchunk*grid%inputychunk+1:j+i*grid%inputxchunk*grid%inputychunk,:) = -grid%mean(i+1) / grid%std(i+1)
+     !enddo
 
      print *, 'shape(reservoir%predictiondata) slab',shape(reservoir%predictiondata)
      if(.not.(present(delete_atmo_data))) then
@@ -1042,7 +1054,7 @@ subroutine start_prediction_slab(reservoir,model_parameters,grid,atmo_reservoir,
 
    if(reservoir%sst_bool_prediction) then
      !call synchronize(reservoir,reservoir%predictiondata(:,1:model_parameters%synclength/model_parameters%timestep_slab),reservoir%saved_state,model_parameters%synclength/model_parameters%timestep_slab-1)
-     call synchronize_error_sync(reservoir,model_parameters,grid,reservoir%predictiondata(:,2:1+model_parameters%synclength/model_parameters%timestep_slab),reservoir%saved_state,model_parameters%synclength/model_parameters%timestep_slab-1) 
+     call synchronize_error_sync(reservoir,model_parameters,grid,reservoir%predictiondata(:,2:1+model_parameters%synclength/model_parameters%timestep_slab),reservoir%saved_state,model_parameters%synclength/model_parameters%timestep_slab-1)
 
      print *, 'model_parameters%synclength/model_parameters%timestep_slab',model_parameters%synclength/model_parameters%timestep_slab
      print *, 'shape(reservoir%predictiondata)',shape(reservoir%predictiondata)
@@ -1094,9 +1106,13 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
       !print *, 'shape(reservoir%win)',shape(reservoir%win),'shape(trainingdata(:,i))',shape(trainingdata(:,i)), 'worker',reservoir%assigned_region
       trainingdata_noisy_temp = gaussian_noise_1d_function(trainingdata(:,i),reservoir%noisemag)
       temp = matmul(reservoir%win,trainingdata_noisy_temp)
-      
-      x_ = tanh(y+temp)
-
+     
+      x_ = y+temp
+      if(reservoir%tanh_lin_mix_bool) then
+        x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+      else
+        x_ = tanh(x_)
+      endif 
       x = (1_dp-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
       y = 0
@@ -1123,7 +1139,12 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
 
         temp = matmul(reservoir%win,trainingdata_noisy(:,reservoir%batch_size))
 
-        x_ = tanh(y+temp)
+        x_ = y+temp
+        if(reservoir%tanh_lin_mix_bool) then
+          x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+        else
+          x_ = tanh(x_)
+        endif
         x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
         reservoir%states(:,reservoir%batch_size) = x
@@ -1146,8 +1167,13 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
         trainingdata_noisy(:,1) = gaussian_noise_1d_function(trainingdata(:,model_parameters%discardlength/model_parameters%timestep_slab+i),reservoir%noisemag) 
  
         temp = matmul(reservoir%win,trainingdata_noisy(:,1))
-         
-        x_ = tanh(y+temp)
+        
+        x_ = y+temp
+        if(reservoir%tanh_lin_mix_bool) then 
+          x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+        else
+          x_ = tanh(x_)
+        endif 
         x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
         reservoir%states(:,1) = x
@@ -1157,7 +1183,12 @@ subroutine reservoir_layer_chunking_ml(reservoir,model_parameters,grid,trainingd
 
         temp = matmul(reservoir%win,trainingdata_noisy(:,mod(i+1,reservoir%batch_size)))
 
-        x_ = tanh(y+temp)
+        x_ = y+temp
+        if(reservoir%tanh_lin_mix_bool) then
+          x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+        else
+          x_ = tanh(x_)
+        endif
         x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
         reservoir%states(:,mod(i+1,reservoir%batch_size)) = x
@@ -1785,8 +1816,13 @@ subroutine predict_slab_ml(reservoir,model_parameters,grid,x)
 
     info = MKL_SPARSE_D_MV(SPARSE_OPERATION_NON_TRANSPOSE,alpha,reservoir%cooA,reservoir%descrA,x,beta,y)
     temp = matmul(reservoir%win,reservoir%feedback)
-
-    x_ = tanh(y + temp)
+ 
+    x_ = y+temp
+    if(reservoir%tanh_lin_mix_bool) then
+      x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+    else
+      x_ = tanh(x_)
+    endif
     x = (1-reservoir%leakage_slab)*x + reservoir%leakage_slab*x_
 
     x_temp = x
@@ -2057,6 +2093,7 @@ subroutine trained_ocean_reservoir_prediction(reservoir,model_parameters,grid,re
 
    reservoir%temp_enc_bool = model_parameters%temp_enc_bool
    reservoir%inputpassthru_bool = model_parameters%inputpassthru_bool
+   reservoir%tanh_lin_mix_bool = model_parameters%tanh_lin_mix_bool
 
    if(reservoir%sst_bool_prediction) then
 
