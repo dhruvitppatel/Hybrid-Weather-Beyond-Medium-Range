@@ -23,7 +23,7 @@ subroutine initialize_model_parameters(model_parameters,processor,num_of_procs)
    write_training_weights = .True.
 
    model_parameters%num_predictions = 3!60!40
-   model_parameters%trial_name = '6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_multiple_leakage_test_oceantimestep_72hr_train1959_2003_'!2kbias_10_year_then_platue_speedy_atmo_only' !14d_0.9rho_10noise_beta0.001_20years'  
+   model_parameters%trial_name = '6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_multiple_leakage_test_oceantimestep_72hr_train1959_2003_tanh_lin_mix_'!2kbias_10_year_then_platue_speedy_atmo_only' !14d_0.9rho_10noise_beta0.001_20years'  
    !model_parameters%trial_name = '6000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_6_slab_ocean_model_true_precip_true'
    !'4000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_2_full_timestep_1'
    !model_parameters%trial_name = '4000_20_20_20_beta_res0.01_beta_model_1.0_prior_0.0_overlap1_vertlevels_4_vertlap_2_full_test_climate_all_tisr_longer'
@@ -48,6 +48,8 @@ subroutine initialize_model_parameters(model_parameters,processor,num_of_procs)
    model_parameters%inputpassthru_bool = .False. !.True.
 
    model_parameters%train_tendencies_bool = .False. !.True.
+
+   model_parameters%tanh_lin_mix_bool = .True.
 
    model_parameters%non_stationary_ocn_climo = .False.
    model_parameters%final_sst_bias = 2.0
@@ -270,6 +272,7 @@ subroutine train_reservoir(reservoir,grid,model_parameters)
    reservoir%temp_enc_bool = model_parameters%temp_enc_bool
    reservoir%inputpassthru_bool = model_parameters%inputpassthru_bool
    reservoir%train_tendencies_bool = model_parameters%train_tendencies_bool
+   reservoir%tanh_lin_mix_bool = model_parameters%tanh_lin_mix_bool
  
    call get_training_data(reservoir,model_parameters,grid,1)
  
@@ -775,6 +778,8 @@ subroutine get_prediction_data(reservoir,model_parameters,grid,start_index,lengt
    integer                    :: datalength
    real(kind=dp), allocatable :: temp_enc_temp(:,:)
 
+   integer  :: i, j
+
    call get_current_time_delta_hour(calendar,start_index)
 
    call numof_hours_into_year(calendar%currentyear,calendar%currentmonth,calendar%currentday,calendar%currenthour,hours_into_first_year)
@@ -910,6 +915,13 @@ subroutine get_prediction_data(reservoir,model_parameters,grid,start_index,lengt
      deallocate(temp_enc_temp)
    endif
 
+   !!STARTING FROM REST ATMO
+   !reservoir%predictiondata = 0.0_dp * reservoir%predictiondata
+   !do i = 1,2*grid%inputzchunk  !setting values for u and v wind components
+   !   j = grid%inputxchunk*grid%inputychunk*grid%inputzchunk
+   !   reservoir%predictiondata(j+(i-1)*grid%inputxchunk*grid%inputychunk+1:j+i*grid%inputxchunk*grid%inputychunk,:) = -grid%mean(grid%inputzchunk+i) / grid%std(grid%inputzchunk+i)
+   !enddo
+
    deallocate(era_data%eravariables)
    deallocate(era_data%era_logp)
 
@@ -955,7 +967,15 @@ subroutine get_prediction_data(reservoir,model_parameters,grid,start_index,lengt
 
      if(reservoir%logp_bool) then
         reservoir%imperfect_model_states(reservoir%local_predictvars*grid%resxchunk*grid%resychunk*grid%reszchunk+1:reservoir%chunk_size_speedy,:) = reshape(speedy_data%speedy_logp(:,:,start_time_memory_index:end_time_memory_index:model_parameters%timestep),[grid%resxchunk*grid%resychunk,length/model_parameters%timestep])
-     endif 
+     endif
+
+     !!STARTING FROM REST ATMO
+     !reservoir%imperfect_model_states = 0.0_dp * reservoir%imperfect_model_states 
+     !j = grid%resxchunk*grid%resychunk*grid%reszchunk 
+     !do i = 1,2*grid%inputzchunk   !setting values for u and v wind components
+     !   reservoir%imperfect_model_states(j+(i-1)*grid%resxchunk*grid%resychunk+1:j+i*grid%resxchunk*grid%resychunk,:) = -grid%mean(grid%inputzchunk+i) / grid%std(grid%inputzchunk+i)
+     !enddo
+ 
      deallocate(speedy_data%speedyvariables)
      deallocate(speedy_data%speedy_logp)
    endif   
@@ -1123,7 +1143,7 @@ subroutine start_prediction(reservoir,model_parameters,grid,prediction_number)
    call get_prediction_data(reservoir,model_parameters,grid,model_parameters%traininglength+model_parameters%prediction_markers(prediction_number),model_parameters%synclength+100,.True.)
   
    call synchronize_print(reservoir,grid,reservoir%predictiondata(:,1:model_parameters%synclength/model_parameters%timestep-1),reservoir%saved_state,model_parameters%synclength/model_parameters%timestep-1)
-  
+   
    if(reservoir%assigned_region == 36)  print *, 'reservoir%predictiondata(:,model_parameters%synclength/model_parameters%timestep)',reservoir%predictiondata(:,model_parameters%synclength/model_parameters%timestep)
    if(reservoir%assigned_region == 36 .and. .not. model_parameters%ml_only)  print *, 'reservoir%imperfect_model_states(:,model_parameters%synclength/model_parameters%timestep-1)',reservoir%imperfect_model_states(:,model_parameters%synclength/model_parameters%timestep-1)
 
@@ -1277,7 +1297,12 @@ subroutine reservoir_layer_chunking_hybrid(reservoir,model_parameters,grid,train
 
       temp = matmul(reservoir%win,trainingdata_noisy_temp)
 
-      x_ = tanh(y+temp)
+      x_ = y+temp
+      if(reservoir%tanh_lin_mix_bool) then
+        x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+      else 
+        x_ = tanh(x_)
+      endif
       x = (1_dp-reservoir%leakage)*x + reservoir%leakage*x_
 
       y = 0
@@ -1308,7 +1333,12 @@ subroutine reservoir_layer_chunking_hybrid(reservoir,model_parameters,grid,train
 
         temp = matmul(reservoir%win,trainingdata_noisy(:,reservoir%batch_size))
 
-        x_ = tanh(y+temp)
+        x_ = y+temp
+        if(reservoir%tanh_lin_mix_bool) then
+          x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+        else
+          x_ = tanh(x_)
+        endif
         x = (1-reservoir%leakage)*x + reservoir%leakage*x_
 
         reservoir%states(:,reservoir%batch_size) = x
@@ -1336,7 +1366,12 @@ subroutine reservoir_layer_chunking_hybrid(reservoir,model_parameters,grid,train
 
         temp = matmul(reservoir%win,trainingdata_noisy(:,1))
 
-        x_ = tanh(y+temp)
+        x_ = y+temp
+        if(reservoir%tanh_lin_mix_bool) then
+          x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+        else
+          x_ = tanh(x_)
+        endif
         x = (1-reservoir%leakage)*x + reservoir%leakage*x_
 
         reservoir%states(:,1) = x
@@ -1350,8 +1385,13 @@ subroutine reservoir_layer_chunking_hybrid(reservoir,model_parameters,grid,train
         endif
 
         temp = matmul(reservoir%win,trainingdata_noisy(:,mod(i+1,reservoir%batch_size)))
-   
-        x_ = tanh(y+temp)
+  
+        x_ = y+temp
+        if(reservoir%tanh_lin_mix_bool) then
+          x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+        else
+          x_ = tanh(x_)
+        endif 
         x = (1-reservoir%leakage)*x + reservoir%leakage*x_
 
         reservoir%states(:,mod(i+1,reservoir%batch_size)) = x
@@ -1662,7 +1702,12 @@ subroutine predict(reservoir,model_parameters,grid,x,local_model_in)
     info = MKL_SPARSE_D_MV(SPARSE_OPERATION_NON_TRANSPOSE,alpha,reservoir%cooA,reservoir%descrA,x,beta,y)
     temp = matmul(reservoir%win,reservoir%feedback)
 
-    x_ = tanh(y + temp)
+    x_ = y + temp
+    if(reservoir%tanh_lin_mix_bool) then
+      x_(1:reservoir%n/2) = tanh(x_(1:reservoir%n/2))
+    else
+      x_ = tanh(x_)
+    endif
     x = (1-reservoir%leakage)*x + reservoir%leakage*x_
 
     x_temp = x
@@ -2065,6 +2110,7 @@ subroutine trained_reservoir_prediction(reservoir,model_parameters,grid)
   reservoir%temp_enc_bool = model_parameters%temp_enc_bool
   reservoir%inputpassthru_bool = model_parameters%inputpassthru_bool
   reservoir%train_tendencies_bool = model_parameters%train_tendencies_bool
+  reservoir%tanh_lin_mix_bool = model_parameters%tanh_lin_mix_bool
  
   reservoir%local_predictvars = model_parameters%full_predictvars
   reservoir%local_heightlevels_input = grid%inputzchunk
@@ -2193,6 +2239,16 @@ subroutine get_temporal_encodings(reservoir,startyear,startmonth,startday,starth
      reservoir%temp_enc(2,i) = cos(2.0_dp * Pi * day_of_year / 365.0_dp)
      call get_current_time_delta_hour_from_current(local_calendar,timestep)
   enddo
+
+end subroutine
+
+subroutine tanh_lin_mix(x)
+  real(kind=dp), intent(inout) :: x(:)
+  
+  integer :: n, i
+
+  n = size(x,1)
+  x(2:n:2) = tanh(x(2:n:2))
 
 end subroutine
 

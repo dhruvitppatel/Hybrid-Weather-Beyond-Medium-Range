@@ -248,6 +248,9 @@ module mod_utilities
     !training on SPEEDY model tendencies
     logical :: train_tendencies_bool
 
+    !reservoir node activations a mix of linear and tanh
+    logical :: tanh_lin_mix_bool
+
     !Local num of height levels and variables predicted per level
     !may change on level and processor.
     !NOTE full_heightlevels /= local_heightlevels possible
@@ -437,6 +440,8 @@ module mod_utilities
     logical                    :: inputpassthru_bool
 
     logical                    :: train_tendencies_bool
+
+    logical                    :: tanh_lin_mix_bool
 
     !mpi stuff
     integer :: irank
