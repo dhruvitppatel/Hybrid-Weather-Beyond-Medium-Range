@@ -132,15 +132,15 @@ program main
          test_state = res%reservoir_special(i,1)%saved_state
          deallocate(res%reservoir_special(i,1)%trainingdata) 
        else 
-         !call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
-         !call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
-         !call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
+         call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_error_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
+         call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_prediction_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
+         call write_netcdf_parallel_mpi_ocean(res%model_parameters,res%grid_special(i,1)%res_xstart,res%grid_special(i,1)%res_ystart,1,'training_truth_ocean_'//res%model_parameters%trial_name//'.nc',mpi_res,.True.,batch_size=(res%model_parameters%traininglength-res%model_parameters%discardlength)/res%model_parameters%timestep_slab)
          print *, 'i,j not training slab ocean',i,j
        endif 
      endif 
 
   enddo
-  endif 
+  endif
   !If we already trained and are just reading in files then we go here 
   if(trained_model) then
     !Loop 1: Loop over all sub domains (regions) on each processor
@@ -161,7 +161,7 @@ program main
 
            print *, 'doing trained_reservoir_prediction'
 
-           call initialize_calendar(calendar,1959,1,1,0) !1981,1,1,0) !1959,1,1,0)
+           call initialize_calendar(calendar,1981,1,1,0) !1959,1,1,0) !1981,1,1,0)
 
            call trained_reservoir_prediction(res%reservoir(i,j),res%model_parameters,res%grid(i,j))
             

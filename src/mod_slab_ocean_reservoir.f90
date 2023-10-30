@@ -53,9 +53,9 @@ subroutine initialize_slab_ocean_model(reservoir,grid,model_parameters)
   
   reservoir%ohtc_prediction = .True.
 
-  reservoir%temp_enc_bool = .False. !.True.
+  reservoir%temp_enc_bool = .False.
 
-  reservoir%tanh_lin_mix_bool = .True.
+  reservoir%tanh_lin_mix_bool = .False.
 
   reservoir%inputpassthru_bool = .False. !.True.
 
@@ -232,6 +232,7 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
       call random_number(temp)
       temp = 3.0_dp*temp - 3.0_dp
       reservoir%leakage_slab(i) = 10.0_dp ** temp
+      !reservoir%leakage_slab(i) = 1.0_dp
    enddo
 
    !do i=1,reservoir%n
@@ -298,7 +299,7 @@ subroutine train_slab_ocean_model(reservoir,grid,model_parameters)
      deallocate(reservoir%imperfect_model_states)
    endif
 
-   !call training_error(reservoir,model_parameters,grid,reservoir%trainingdata(:,model_parameters%timestep_slab:model_parameters%traininglength:model_parameters%timestep_slab))
+   call training_error(reservoir,model_parameters,grid,reservoir%trainingdata(:,model_parameters%timestep_slab:model_parameters%traininglength:model_parameters%timestep_slab))
 
    print *, 'cleaning up', reservoir%assigned_region
    call clean_batch(reservoir)
@@ -977,7 +978,7 @@ subroutine initialize_prediction_slab(reservoir,model_parameters,grid,atmo_reser
    !Try syncing on un-noisy data
    if(.not.(allocated(reservoir%saved_state))) allocate(reservoir%saved_state(reservoir%n))
    reservoir%saved_state = 0
-   un_noisy_sync = 24*364!98!2160!700
+   un_noisy_sync = 24*363!98!2160!700
 
    !From this point on reservoir%trainingdata and reservoir%imperfect_model have a temporal resolution model_parameters%timestep_slab
    !instead of 1 hour resolution and atmo_reservoir%trainingdata has a temporal
@@ -2212,7 +2213,7 @@ subroutine read_ohtc_parallel_training(reservoir,model_parameters,grid,ohtc_var,
    !Starting date of the ohtc data
    call initialize_calendar(ohtc_calendar,1958,1,16,0) !1979,1,16,0)
 
-   call get_current_time_delta_hour(ohtc_calendar,0)
+   call get_current_time_delta_hour(ohtc_calendar,-24*16) !0)
 
    call get_current_time_delta_hour(calendar,0) !model_parameters%traininglength+model_parameters%synclength)
 
