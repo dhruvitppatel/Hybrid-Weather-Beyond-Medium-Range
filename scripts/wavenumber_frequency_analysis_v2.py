@@ -35,7 +35,7 @@ def plot_normalized_symmetric_spectrum(s, title_pre, ofil=None):
     swf = np.where(swfreq == 1e20, np.nan, swfreq)
     swk = np.where(swwn == 1e20, np.nan, swwn)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(6,6))
     c = 'black' # COLOR FOR DISPERSION LINES/LABELS
     z = s.transpose().sel(frequency=slice(*fb), wavenumber=slice(-15,15))
     z.loc[{'frequency':0}] = np.nan
@@ -57,7 +57,7 @@ def plot_normalized_symmetric_spectrum(s, title_pre, ofil=None):
     ax.set_ylabel('Frequency (CPD)', fontsize=12)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12) 
-    fig.colorbar(img)
+    #fig.colorbar(img)
     if ofil is not None:
         fig.savefig(ofil, bbox_inches='tight', dpi=144)
     else:
@@ -73,8 +73,8 @@ def plot_normalized_asymmetric_spectrum(s, title_pre, ofil=None):
     swf = np.where(swfreq == 1e20, np.nan, swfreq)
     swk = np.where(swwn == 1e20, np.nan, swwn)
 
-    fig, ax = plt.subplots()
-    c = 'darkgray' # COLOR FOR DISPERSION LINES/LABELS
+    fig, ax = plt.subplots(figsize=(6,6))
+    c = 'black' # COLOR FOR DISPERSION LINES/LABELS
     z = s.transpose().sel(frequency=slice(*fb), wavenumber=slice(-15,15))
     z.loc[{'frequency':0}] = np.nan
     kmesh0, vmesh0 = np.meshgrid(z['wavenumber'], z['frequency'])
@@ -93,7 +93,7 @@ def plot_normalized_asymmetric_spectrum(s, title_pre, ofil=None):
     ax.set_title(title)
     ax.set_xlabel('Zonal wavenumber', fontsize=12)
     ax.set_ylabel('Frequency (CPD)', fontsize=12)
-    fig.colorbar(img)
+    #fig.colorbar(img)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
     if ofil is not None:
@@ -238,10 +238,10 @@ def calculate_plot_wheeler_kiladis(startdates,prediction_length,timestep):
     obs_asym = xr.concat(obs_asym, dim='samples').mean(dim='samples')
 
     # Plotting routine
-    plot_normalized_symmetric_spectrum(hybrid_sym,'Hybrid: ')
-    plot_normalized_asymmetric_spectrum(hybrid_asym,'Hybrid: ')
-    plot_normalized_symmetric_spectrum(obs_sym,'ERA5: ')
-    plot_normalized_asymmetric_spectrum(obs_asym,'ERA5: ') 
+    plot_normalized_symmetric_spectrum(hybrid_sym, 'Hybrid: ', 'Hybrid_SymmWKDiagram.png')
+    plot_normalized_asymmetric_spectrum(hybrid_asym,'Hybrid: ', 'Hybrid_ASymmWKDiagram.png')
+    plot_normalized_symmetric_spectrum(obs_sym,'ERA5: ', 'ERA5_SymmWKDiagram.png')
+    plot_normalized_asymmetric_spectrum(obs_asym,'ERA5: ', 'ERA5_ASymmWKDiagram.png') 
 
 
 startdates = pd.date_range(start='1/16/2003', end='12/23/2018', freq='30D')
@@ -249,5 +249,9 @@ startdates = pd.date_range(start='1/16/2003', end='12/23/2018', freq='30D')
 
 prediction_length = 8760 * 2
 timestep = 6
+
+
+font = {'size': 12}
+mpl.rc('font', **font)
 
 calculate_plot_wheeler_kiladis(startdates,prediction_length,timestep)

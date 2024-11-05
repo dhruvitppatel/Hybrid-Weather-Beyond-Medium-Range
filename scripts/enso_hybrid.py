@@ -2,7 +2,7 @@ import numpy as np
 import numpy.ma as ma
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap, BoundaryNorm
 from matplotlib.ticker import NullFormatter, MultipleLocator
 from netCDF4 import Dataset
 import cartopy as cart
@@ -13,6 +13,7 @@ from cartopy.mpl.geoaxes import GeoAxes
 from collections import deque
 import xarray as xr
 import glob
+from datetime import date as datetimedate
 from datetime import datetime, timedelta
 from numba import jit
 import calendar
@@ -27,7 +28,9 @@ from scipy.stats import linregress, pearsonr#, PermutationMethod
 import seaborn as sns
 import pandas as pd
 from xskillscore import pearson_r_p_value, pearson_r_eff_p_value
-
+import cftime
+from dateutil.relativedelta import relativedelta
+ 
 import pycwt as wavelet
 from pycwt.helpers import find
 
@@ -1893,21 +1896,28 @@ def get_nino_index_rmse_new(startdates, prediction_length, timestep, lead_max=24
 
     rmse, rmse_per, rmse_climo = [], [], []
     std, std_per, std_climo = [], [], []
+    bias = []
+    var = []
     for i in range(lead_max):
         rmse_temp, rmse_per_temp, rmse_climo_temp = [], [], []
+        bias_temp, var_temp = [], []
         for j in range(len(ds_hybrid)):
             time_ind = ds_hybrid[j].indexes["time"].values[i]
             rmse_temp.append(ds_hybrid[j].sel(time=time_ind).values - ds_observed.sel(time=time_ind).values)
             rmse_per_temp.append(ds_per[j].sel(time=time_ind).values - ds_observed.sel(time=time_ind).values)
             rmse_climo_temp.append(ds_observed.sel(time=time_ind).values)
+            bias_temp.append(rmse_temp[-1])
+            var_temp.append(ds_hybrid[j].sel(time=time_ind).values)
         rmse.append(np.sqrt(np.mean(np.square(rmse_temp))))
         rmse_per.append(np.sqrt(np.mean(np.square(rmse_per_temp))))
         rmse_climo.append(np.sqrt(np.mean(np.square(rmse_climo_temp))))
         std.append(np.std(rmse_temp))
         std_per.append(np.std(rmse_per_temp))
         std_climo.append(np.std(rmse_climo_temp))
+        bias.append(np.mean(bias_temp))
+        var.append(np.std(bias_temp))    #var.append(np.var(var_temp))
 
-    return np.array(rmse), np.array(rmse_per), np.array(rmse_climo), np.array(std), np.array(std_per), np.array(std_climo)
+    return np.array(rmse), np.array(rmse_per), np.array(rmse_climo), np.array(std), np.array(std_per), np.array(std_climo), np.array(bias), np.array(var)
 
 def get_nino34_mean_std_vs_lead_time(ds_hybrid, ds_obs):
     """Get mean and var vs lead time."""
@@ -2110,13 +2120,177 @@ def get_pearson_corr(startdates,prediction_length,timestep,lead_max=24):
 
     return np.array(C), np.array(C_per), std, std_per
 
+def decode_cf(ds, time_var):
+    """Decodes time dimension to CFTime standards."""
+
+    if ds[time_var].attrs["calendar"] == "360":
+       ds[time_var].attrs["calendar"] = "360_day"
+    ds = xr.decode_cf(ds, decode_times=True)
+    return ds
+
+def get_anoms(ds, ds_clim):
+
+    # get monthly clim
+    ds_clim = ds_clim.groupby('time.month').mean(dim='time')
+    #print(f'ds_clim: {ds_clim}\n')
+
+    # get anoms
+    ds = ds.groupby('time.month') - ds_clim
+    #print(f'ds_anom: {ds}')
+
+    return ds
+
+def get_acc_nmme(x, y):
+    """
+    x, y: [num forecasts, lead times]
+    """
+
+    leads = x.shape[1]
+    acc = []
+    for lead in range(leads):
+        acc.append(np.corrcoef(x[:, lead], y[:, lead])[0, 1])
+    
+    return acc
+
+def get_rmse_nmme(x, y):
+    """
+    x, y: [num forecasts, lead times]
+    """
+    
+    leads = x.shape[1]
+    rmse = []
+    for lead in range(leads):
+        err = (x[:, lead] - y[:, lead]) ** 2
+        rmse.append(np.sqrt(np.mean(err)))
+    
+    return rmse
+
+def get_avg_nmme_skill(models, startdates, nmme_startdate, nmme_enddate):
+
+    # Lat/Lon 
+    lat_slice = slice(-5, 5)
+    lon_slice = slice(360-170, 360-150)
+
+    # Get ERA5 climatology / Nino 3.4 index
+    obs_climo_ref_startdate = datetime(1981,1,1,0)
+    obs_climo_ref_enddate = datetime(2002,12,1,0)
+    timestep = 6
+
+    ds_observed_climo = get_obs_sst_timeseries(obs_climo_ref_startdate, obs_climo_ref_enddate, timestep)['sst']
+    ds_observed_unsmoothed = ds_observed_climo
+    date, enddate = startdates[0] - timedelta(hours=24*60), startdates[-1] + timedelta(hours=prediction_length)
+    ds_observed = get_obs_sst_timeseries(date, enddate, timestep)
+    ds_verif_nino = nino_index_monthly_specified_climo(ds_observed, "3.4", ds_observed_climo)
+    time_index = ds_verif_nino["time"]
+    print(f'ds_verif_nino["time"]: {ds_verif_nino["time"]}\n')
+    ds_verif_nino = uniform_filter1d(ds_verif_nino["sst"].values, size=3, origin=1)
+    ds_verif_nino = xr.DataArray(ds_verif_nino, dims="time", coords={"time": time_index.values}, name=date.strftime("%m_%d_%Y_%H"))
+
+    # reformat time dimensions to match nmme data
+    date  = ds_verif_nino["time"].values[0]
+    year = date.astype('datetime64[Y]').astype(int) + 1970
+    month = date.astype('datetime64[M]').astype(int) % 12 + 1
+    date_cft = cftime.DatetimeGregorian(year, month, 1)
+    print(f'date_cft: {date_cft}\n')
+    ds_verif_nino["time"] = xr.cftime_range(start=date_cft, periods=ds_verif_nino["time"].size, freq="MS", calendar="360_day")
+
+    # Spatially average and temporally resample climo data and reformat dime dim
+    ds_observed_climo = ds_observed_climo.sel(lon=lon_slice, lat=lat_slice).mean(dim=['lon', 'lat'])
+    ds_observed_climo = ds_observed_climo.resample(time="1MS").mean(dim="time")
+    ds_observed_climo["time"] = xr.cftime_range(start="1981-01", periods=ds_observed_climo["time"].size, freq="MS", calendar="360_day")
+    print(f'ds_observed_climo reformat time: {ds_observed_climo}\n')
+
+    # Data URLs
+    url_1 = 'http://iridl.ldeo.columbia.edu/SOURCES/.Models/.NMME/'
+    url_2 = '/.HINDCAST/.MONTHLY/.sst/X/190/240/RANGEEDGES/Y/-5/5/RANGEEDGES/[X%20Y%20M]average/dods'
+
+    accs = {}
+    rmses = {}
+    biases = {}
+    varr = {}
+    for model in models:
+        print(f'Fetching model: {model}\n')
+
+        # Fetch data
+        url = url_1 + model + url_2
+        fcstds = xr.open_dataset(url, decode_times=False)
+        fcstds = decode_cf(fcstds, 'S').compute()['sst']
+
+        # reformat dimensions/attributes according to climpred convention
+        fcstds = fcstds.rename({"S": "init", "L": "lead"})
+        fcstds["lead"] = (fcstds["lead"] - 0.5).astype("int")
+        fcstds["lead"].attrs = {"units": "months"}
+
+        # Select appropriate subset of verification data
+        fcstds = fcstds.sel(init=slice(nmme_startdate, nmme_enddate))
+
+        preds = []
+        obs = []
+        # Calculate acc of each forecast
+        init_dates = fcstds['init'].values
+        leads = fcstds['lead'].values
+        for date in init_dates:
+            # assign the valid_dates to 'lead' coordinate values
+            year, month, day = date.year, date.month, date.day
+            init_date = datetimedate(year, month, day) + relativedelta(months=+1) 
+            valid_dates = pd.date_range(start=init_date, periods=len(leads), freq='MS')
+            ds = fcstds.sel(init=date)
+            ds = ds.assign_coords(lead=valid_dates)
+
+            # rename 'lead' as 'time'
+            ds = ds.rename({'lead': 'time'})
+
+            # get appropriate subset of verification data
+            obs_anom = ds_verif_nino.sel(time=valid_dates)
+            print(f'valid_dates: {valid_dates}\n')
+            print(f'obs_anom: {obs_anom}\n')
+            obs_anom = obs_anom.values
+
+            # get anomalies of prediction
+            ds_anom = get_anoms(ds, ds_observed_climo).values
+            print(f'ds_anom: {ds_anom}\n')
+            print(f'ds_anom.shape obs_anom.shape: {ds_anom.shape}, {obs_anom.shape}')
+            # perform 3-month avg
+            # prepend true 2 months of nino3.4vals, smooth, remove true 2 months
+            padding_dates = pd.date_range(start=init_date+relativedelta(months=-1), periods=2, freq='MS')
+            padding = ds_verif_nino.sel(time=padding_dates).values
+            print(f'padding size: {len(padding)}\n')
+            ds_anom = np.concatenate([padding, ds_anom])
+            ds_anom = uniform_filter1d(ds_anom, size=3, origin=1)
+            ds_anom = ds_anom[2:]
+
+            preds.append(ds_anom)
+            obs.append(obs_anom)
+        
+        preds = np.array(preds)
+        obs = np.array(obs)
+
+        # get acc
+        acc = get_acc_nmme(preds, obs)
+        print(f'acc: {acc}')
+        
+        # get rmse
+        rmse = get_rmse_nmme(preds, obs)
+
+        # get bias
+        bias = np.mean(preds - obs, axis=0) 
+
+        # get var
+        var = np.std(preds - obs, axis=0)
+
+        accs[model] = acc
+        rmses[model] = rmse
+        biases[model] = bias
+        varr[model] = var
+    return accs, rmses, biases, varr
+
 def get_pearson_corr_mjo_precip(startdates,prediction_length,timestep,lead_max=10):
     """Calculate PCC skill of MJO-related WP precip vs lead time."""
    
     hybrid_root = "/scratch/user/dpp94/Predictions/Hybrid/hybrid_prediction_era6000_20_20_20_sigma0.5_beta_res0.001_beta_model_1.0_prior_0.0_overlap1_vertlevel_1_precip_epsilon0.001_ohtc_multiple_leakage_test_oceantimestep_72hr_train1981_2002_oldcal__pred_newcal_trial_" 
 
     lats = slice(-15,15)
-    lons = slice(130,180)
+    lons = slice(360-180,360-130) #WP:(360-180,360-130),EP:(130,180)
 
     obs_climo_ref_startdate = datetime(1981,1,1,0)
     obs_climo_ref_enddate = datetime(2002,12,1,0)
@@ -2460,16 +2634,18 @@ def get_ninoskill_lead_stmon(ds_hybrid, ds_obs):
             pcorr[j,i] = pearsonr(hybrid_lead_mon.values,truth).statistic
     return pcorr
    
-def plot_ninoskill_contour(pcorr):
+def plot_ninoskill_contour(pcorr, pcorr_per=None):
     """Make contour plot of ninoskill for lead time vs start month.
     Input: 
       pcorr: [np.array] [12 x lead_max] matrix of correlation coefficients."""
 
     lead_max = pcorr.shape[1]
     fig, ax = plt.subplots()
-    ax.contourf(pcorr, levels=np.arange(0,1.01,0.1), extend="both", cmap="RdBu_r")
+    img = ax.contourf(pcorr, levels=np.arange(0,1.01,0.1), extend="min", cmap="RdBu_r")
     ct = ax.contour(pcorr, [0.5, 0.6, 0.7, 0.8, 0.9], colors="k", linewidths=1)
-    ax.clabel(ct, fontsize=8, colors="k", fmt="%.1f")
+    #ax.clabel(ct, fontsize=8, colors="k", fmt="%.1f")
+    if pcorr_per is not None:
+       ax.contour(pcorr_per, levels=[0.5], colors="k", linewidth=1, linestyles="dotted")
     ax.set_xticks(np.array([1, 5, 10, 15, 20]) - 1)
     ax.xaxis.set_minor_locator(MultipleLocator(1))
     ax.set_xticklabels(np.array([1,5,10,15,20]))
@@ -2481,8 +2657,11 @@ def plot_ninoskill_contour(pcorr):
     ax.set_ylabel("Month", fontsize=16)
     ax.set_xlim([0, 9])  #lead_max-1])
     ax.tick_params(axis='both', which='major', labelsize=16)
+    cbar = plt.colorbar(img, extend='min')
+    cbar.set_label('PCC')
     plt.tight_layout()
-    plt.show()
+    #plt.show()
+    fig.savefig('ENSO_skill_startmonth_leadtime.svg')
 
 def get_sst_rmse(startdates, prediction_length, timestep, ocean_timestep):
     """Load in all observed, and Hybrid, predicted SST datasets. Calculate RMSE vs lead time for all datasets.
@@ -3079,7 +3258,7 @@ def calculate_plot_nino_precip_anom(startdates,ds_hybrid_all,ds_obs_all,ds_hybri
     lons = ds_hybrid_all[0].Lon.values
     lats = ds_hybrid_all[0].Lat.values
 
-    nrows, ncols = 4, 3
+    nrows, ncols = 4, 2 #3
     fig, axs = plt.subplots(nrows=nrows,ncols=ncols,
                             subplot_kw={'projection': ccrs.PlateCarree(central_longitude=-179)},
                             figsize=(11,8.5), sharex='col', sharey='row')
@@ -3135,7 +3314,7 @@ def calculate_plot_nino_precip_anom(startdates,ds_hybrid_all,ds_obs_all,ds_hybri
            pvals = [pvals_hybrid, pvals_obs]
 
         # Plotting routine
-        for i, ax_num in enumerate([3*num_season, 3*num_season+1, 3*num_season+2]):
+        for i, ax_num in enumerate([2*num_season, 2*num_season+1]): #[3*num_season, 3*num_season+1, 3*num_season+2]):
             data = pcc[i]
             data, data_lons = add_cyclic_point(data, coord=lons)
             levels = [-1,-0.8,-0.6,-0.4,-0.2,0.,0.2,0.4,0.6,0.8,1.]
@@ -3154,21 +3333,23 @@ def calculate_plot_nino_precip_anom(startdates,ds_hybrid_all,ds_obs_all,ds_hybri
             title_pre = ['Hybrid', 'ERA5', 'Hybrid - ERA5']
             #axs[ax_num].set_title(f'{seasons[num_season]}: {title_pre[i]}')
             axs[ax_num].coastlines()
-            if ax_num in [0,3,6,9]:
+            if ax_num in [0,2,4,6]: #[0,3,6,9]:
                axs[ax_num].set_yticks([-60,-30,0,30,60], crs=ccrs.PlateCarree())
                lat_formatter = LatitudeFormatter()
                axs[ax_num].yaxis.set_major_formatter(lat_formatter)
-            if ax_num in [9,10,11]:
+            if ax_num in [6,7,]: #9,10,11]:
                axs[ax_num].set_xticks([-90,0,90,180],crs=ccrs.PlateCarree())
                lon_formatter = LongitudeFormatter(zero_direction_label=True)
                axs[ax_num].xaxis.set_major_formatter(lon_formatter)
              
     
-    fig.subplots_adjust(bottom=0.2, top=0.9, left=0.05, right=0.95,
-                        wspace=0.3, hspace=0.25) # [left,right,bottom,top,width-white-space,height-white-space]
+    fig.subplots_adjust(bottom=0.2, top=0.9, left=0.38, right=0.88, #0.95,
+                        wspace=0.05, hspace=0.15) # [left,right,bottom,top,width-white-space,height-white-space]
     cbar_ax = fig.add_axes([0.9, 0.2, 0.01, 0.6]) # [left,bottom,width,height]
     cbar = fig.colorbar(cs, cax=cbar_ax, orientation='vertical', label='r')
-    plt.show()
+    #plt.show()
+
+    fig.savefig('ONI_Precip_PCC.svg')
 
 def calculate_plot_nino_precip_anom_all_season(startdates,ds_hybrid_all,ds_obs_all,ds_hybrid_nino_all,ds_obs_nino_all,var='p6hr',sigtest=True):
     """Calculate avg ONI-precip anom all-seasonal pcc.
@@ -3180,7 +3361,7 @@ def calculate_plot_nino_precip_anom_all_season(startdates,ds_hybrid_all,ds_obs_a
     lons = ds_hybrid_all[0].Lon.values
     lats = ds_hybrid_all[0].Lat.values
 
-    nrows, ncols = 1, 3
+    nrows, ncols = 1, 2 #3
     fig, axs = plt.subplots(nrows=nrows,ncols=ncols,
                             subplot_kw={'projection': ccrs.PlateCarree(central_longitude=-179)},
                             figsize=(11,8.5), sharex='col', sharey='row')
@@ -3215,9 +3396,9 @@ def calculate_plot_nino_precip_anom_all_season(startdates,ds_hybrid_all,ds_obs_a
         #print(f'ds_hybrid_nino: {ds_hybrid_nino}\n')
         # ... for concurrent ... isel(Timestep=2) for var
         # ... for lagged ...     isel(Timestep=5) for var
-        samples_obs.append(ds_obs.isel(Timestep=2)) #slice(0,3)).mean(dim='Timestep'))
+        samples_obs.append(ds_obs.isel(Timestep=5)) #slice(0,3)).mean(dim='Timestep'))
         samples_obs_nino.append(ds_obs_nino.isel(Timestep=2)) #slice(0,3)).mean(dim='Timestep'))
-        samples_hybrid.append(ds_hybrid.isel(Timestep=2)) #slice(0,3)).mean(dim='Timestep'))
+        samples_hybrid.append(ds_hybrid.isel(Timestep=5)) #slice(0,3)).mean(dim='Timestep'))
         samples_hybrid_nino.append(ds_hybrid_nino.isel(Timestep=2)) #slice(0,3)).mean(dim='Timestep'))
     samples_obs = xr.concat(samples_obs, dim='ens') #'Timestep')
     samples_obs_nino = xr.concat(samples_obs_nino, dim='ens') #'Timestep')
@@ -3266,11 +3447,13 @@ def calculate_plot_nino_precip_anom_all_season(startdates,ds_hybrid_all,ds_obs_a
         axs[i].xaxis.set_major_formatter(lon_formatter)
 
 
-    fig.subplots_adjust(bottom=0.2, top=0.9, left=0.05, right=0.95,
-                        wspace=0.3, hspace=0.25) # [left,right,bottom,top,width-white-space,height-white-space]
-    cbar_ax = fig.add_axes([0.9, 0.2, 0.01, 0.6]) # [left,bottom,width,height]
+    fig.subplots_adjust(bottom=0.2, top=0.9, left=0.35, right=0.85,
+                        wspace=0.05, hspace=0.25) # [left,right,bottom,top,width-white-space,height-white-space]
+    cbar_ax = fig.add_axes([0.87, 0.2, 0.01, 0.6]) # [left,bottom,width,height]
     cbar = fig.colorbar(cs, cax=cbar_ax, orientation='vertical', label='r')
-    plt.show()
+    #plt.show()
+
+    fig.savefig('ONI_SST_PCC_lagged.svg')
 
 def get_spatial_var_anom_ds_for_oni_corr(startdates,prediction_length,timestep,var,leadtime=12):
     """Return Python lists of xarray DataArrays of anomaly heatmaps for given variable.
@@ -3534,6 +3717,12 @@ def plot_spatial_anom_pcc_weekly(ds_hybrid_all,ds_obs_all,startdates,sigtest=Tru
         temp_colormap = sns.color_palette("Spectral", as_cmap=True)
         temp_colormap = temp_colormap.reversed()
         cmap = temp_colormap
+        white_color = (1,1,1,1) #RGBA for white
+        colors = [cmap(i) for i in np.linspace(0,1,256)]
+        for i in range(len(colors)):
+            if -0.25 <= (i / 255 - 0.5) * 2 <= 0.25:
+                colors[i] = white_color
+        cmap = LinearSegmentedColormap.from_list('custom_spectral', colors)
         #cmap = (mpl.colors.ListedColormap(["#0000ff","#6464ff","#c8c8ff",
         #                                   "#eee68c","#e7dc32","#ff8801",
         #                                   "#ff0100"]).with_extremes(under="#000178",
@@ -3582,7 +3771,119 @@ def plot_spatial_anom_pcc_weekly(ds_hybrid_all,ds_obs_all,startdates,sigtest=Tru
     #    label='r'
     #)
     
-    plt.show()    
+    #plt.show()
+    plt.tight_layout() 
+    fig.savefig('Precip_Weekly_PCC.svg')
+
+def plot_spatial_bias_weekly_djf(ds_hybrid_all, ds_obs_all, startdates):
+    """Plot mean precip rates at weekly lead times in DJF season.
+       Row 1: Hybrid mean rates
+       Row 2: ERA5 mean rates
+       Row 3: Abs difference."""
+
+    leadtime = 4
+    num_dates = len(startdates)
+
+    lons = ds_hybrid_all[0].Lon.values
+    lats = ds_hybrid_all[0].Lat.values
+
+    startmonth = 12   
+
+    nrows, ncols = 1, 4
+    fig, axs = plt.subplots(nrows=nrows,ncols=ncols,
+                            subplot_kw={'projection': ccrs.PlateCarree(central_longitude=-179)},
+                            figsize=(11,8.5), sharex='col', sharey='row')
+
+    axs = axs.flatten()
+
+    hybrid_mean, obs_mean, bias = [], [], []
+    for lead in range(leadtime):
+        samples_hybrid, samples_obs = [], []
+        for i in range(num_dates):
+            ds_hybrid = ds_hybrid_all[i] * 25.4  # for converting inches -> mm
+            ds_obs = ds_obs_all[i] * 25.4
+            if (startdates[i].month == startmonth):
+               print(f'Mean using startmonth: {startdates[i].month}\n')
+               samples_hybrid.append(ds_hybrid.isel(Timestep=lead))
+               samples_obs.append(ds_obs.isel(Timestep=lead))
+        samples_hybrid = xr.concat(samples_hybrid, dim='Timestep')
+        samples_obs = xr.concat(samples_obs, dim='Timestep')
+        print(f'samples_hybrid: {samples_hybrid}\n')
+        hybrid_mean.append(samples_hybrid.mean(dim='Timestep'))
+        obs_mean.append(samples_obs.mean(dim='Timestep'))
+        bias.append(hybrid_mean[-1] - obs_mean[-1])
+        print(f'bias[-1]: {bias[-1]}\n')
+    print(f'bias[0].shape: {bias[0].shape}\n')
+
+    for lead in range(leadtime):
+        print(f'plotting lead time {lead}\n')
+        hybrid_data = hybrid_mean[lead]
+        obs_data = obs_mean[lead]
+        bias_data = bias[lead]
+        hybrid_data, hybrid_data_lons = add_cyclic_point(hybrid_data, coord=lons)
+        obs_data, obs_data_lons = add_cyclic_point(obs_data, coord=lons)
+        bias_data, bias_data_lons = add_cyclic_point(bias_data, coord=lons)
+        
+        # Discrete colorbar from de Andrade Global Precip .. paper
+        colors = ['#0000ff', '#8282ff', '#cccdff', '#ffffff', '#ffcdce', '#ff8281', '#ff0100'] # blue to red
+        cmap = (ListedColormap(colors).with_extremes(under='#000178', over='#790002'))
+        bounds = [-35,-25,-15,-5,5,15,25,35]
+        norm = BoundaryNorm(bounds, cmap.N) #, extend='both')
+        
+        #cmap = sns.color_palette("vlag", as_cmap=True)
+        #cmap = cmap.reversed()
+        
+        #hybrid_cs = axs[lead, 0].pcolormesh(hybrid_data_lons, lats, hybrid_data,
+        #                                    transform=ccrs.PlateCarree(),
+        #                                    cmap=cmap, vmin=0, vmax=16)
+        #fig.colorbar(hybrid_cs, shrink=0.5, extend='both')
+         
+        #obs_cs = axs[lead, 1].pcolormesh(obs_data_lons, lats, obs_data,
+        #                                 transform=ccrs.PlateCarree(),
+        #                                 cmap=cmap, vmin=0, vmax=16)
+        #fig.colorbar(obs_cs, shrink=0.5, extend='both')
+ 
+        cs = bias_cs = axs[lead].pcolormesh(bias_data_lons, lats, bias_data,
+                                            transform=ccrs.PlateCarree(),
+                                            cmap=cmap, norm=norm) #, vmin=-35, vmax=35)
+        #fig.colorbar(bias_cs, shrink=0.5, extend='both')
+
+    #axs = axs.reshape((nrows, ncols))
+    #for row in range(nrows):
+    #    axs[row, 0].set_yticks([-60,-30,0,30,60], crs=ccrs.PlateCarree())
+    #    lat_formatter = LatitudeFormatter()
+    #    axs[row, 0].yaxis.set_major_formatter(lat_formatter)
+    axs[0].set_yticks([-60,-30,0,30,60], crs=ccrs.PlateCarree())
+    lat_formatter = LatitudeFormatter()
+    axs[0].yaxis.set_major_formatter(lat_formatter)
+
+    #for col in range(ncols):
+    #    axs[nrows-1,col].set_xticks([-90,0,90,180], crs=ccrs.PlateCarree())
+    #    lon_formatter = LongitudeFormatter(zero_direction_label=True)
+    #    axs[nrows-1,col].xaxis.set_major_formatter(lon_formatter)  
+   
+    for ax in axs.flatten():
+        ax.set_xticks([-90,0,90,180], crs=ccrs.PlateCarree())
+        lon_formatter = LongitudeFormatter(zero_direction_label=True)
+        ax.xaxis.set_major_formatter(lon_formatter)
+    for ax in axs.flatten():
+        ax.coastlines()
+ 
+    #fig.subplots_adjust(bottom=0.2,top=0.9,left=0.05,right=0.95,
+    #             wspace=0.3,hspace=0.25) #[left,right,bottom,top,width-white-space,height-white-space]
+    #plt.suptitle('Mean Precip Rates')
+
+    cbar_ax = fig.add_axes([0.25,0.15,0.5,0.025])
+    #fig.colorbar(cs, cax=cbar_ax, orientation='horizontal', label='mm') #, boundaries=bounds, ticks=np.arange(-35,36,10))
+    fig.colorbar(
+        mpl.cm.ScalarMappable(cmap=cmap, norm=norm),
+        cax=cbar_ax, orientation='horizontal',
+        extend='both', extendfrac='auto',
+        spacing='uniform', label='mm') 
+
+    #plt.show() 
+    plt.tight_layout() 
+    fig.savefig('DJF_Weekly_Precip_Errors.svg')   
  
 
 def plot_spatial_anom_rmse_pcc_seasonal(ds_hybrid_all,ds_obs_all,startdates,sigtest=True):
@@ -4294,16 +4595,17 @@ def create_avg_Wout_and_save():
 # ------------------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------------------- #
 
-startdates = pd.date_range(start='1/16/2003', end='12/23/2018', freq='30D')
+startdates = pd.date_range(start='1/16/2003', end='12/23/2018', freq='30D') #'12/23/2018' 
 prediction_length = 8760*2  
 timestep = 6
 
-font = {'size'  : 10}
+font = {'size'  : 14} #16
 mpl.rc('font', **font)
 
 # ----- UNCOMMENT FOR: Pearson-r skill and avg Nino3.4 RMSE ----- #
-##C, C_per, C_std, C_per_std = get_pearson_corr(startdates,prediction_length,timestep,lead_max=20)
-##rmse, rmse_per, rmse_climo, rmse_std, rmse_per_std, rmse_climo_std = get_nino_index_rmse_new(startdates,prediction_length,timestep,lead_max=20)
+## Get Hybride PCC and RMSE
+##C, C_per, C_std, C_per_std = get_pearson_corr(startdates,prediction_length,timestep,lead_max=12)
+##rmse, rmse_per, rmse_climo, rmse_std, rmse_per_std, rmse_climo_std, bias, var = get_nino_index_rmse_new(startdates,prediction_length,timestep,lead_max=12)
 ##C_std_low = np.array([a[0] for a in C_std])
 ##C_std_high = np.array([a[1] for a in C_std])
 ##C_per_std_low = np.array([a[0] for a in C_per_std])
@@ -4313,100 +4615,175 @@ mpl.rc('font', **font)
 ##print(f'\n\nrmse: {rmse}\n\n')
 ##print(f'\n\nrmse_per: {rmse_per}\n\n')
 ##print(f'\n\nrmse_climo: {rmse_climo}\n\n')
-##lead = np.arange(1,len(C)+1)
-##
+##lead = np.arange(1,len(rmse)+1)
+
+## Get NMME PCC and RMSE
+##nmme_startdate = '2003-01-01'
+##nmme_enddate = '2014-09-01'
+
+##models = ['CanCM4i',
+##          'CanSIPS-IC3',
+##          'CanSIPSv2',
+##          'CMC2-CanCM4',
+##          'GEM-NEMO',
+##          'NASA-GEOSS2S']
+
+##nmme_accs, nmme_rmses, nmme_biases, nmme_vars = get_avg_nmme_skill(models,startdates,nmme_startdate, nmme_enddate)
+
+## Plot PCC
 ##fig, ax = plt.subplots()
-##p1 = ax.plot(lead, C, '-b')
+##p1 = ax.plot(lead, C, '-b', label='Hybrid', linewidth=2)
 ##ax.fill_between(lead, C_std_low, C_std_high, color='b', alpha=0.1)
-##p2 = ax.plot(lead, C_per, '--b')
+##p2 = ax.plot(lead, C_per, '--b', label='Persistence', linewidth=1)
 ##ax.fill_between(lead, C_per_std_low, C_per_std_high, color='b', alpha=0.1)
-##p3 = ax.plot(lead, rmse, '-r')
-##ax.fill_between(lead, rmse-rmse_std/2, rmse+rmse_std/2, color='r', alpha=0.1)
-##p4 = ax.plot(lead, rmse_per, '--r') 
-##ax.fill_between(lead, rmse_per-rmse_per_std/2, rmse_per+rmse_per_std/2, color='r', alpha=0.1)
-##p5 = ax.plot(lead, rmse_climo, '--g')
-##ax.fill_between(lead, rmse_climo-rmse_climo_std/2, rmse_climo+rmse_climo_std/2, color='g', alpha=0.1)
-##plt.axhline(y=0.5, color='k', linestyle='--')
-##ax.set_xlabel('Lead time (months)', fontsize=16)
-##ax.set_ylabel('PCC',fontsize=16)
-##ax.grid(True)
-##ax.legend([p1[0],p2[0],p3[0],p4[0],p5[0]],['PCC - Hybrid','PCC - Persistence','RMSE - Hybrid','RMSE - Persistence','RMSE - Climatology'],fontsize=16)
-##ax.set_xlim([1,10])
-##ax.set_ylim([0,1.5])
-##ax.tick_params(axis='both', which='major', labelsize=16)
+##for model in models:
+##    acc = nmme_accs[model]
+##    x = np.arange(1, len(acc)+1)
+##    ax.plot(x, acc, label=model, linewidth=1, alpha=0.75)
+##ax.hlines(0.5, 0, 13, colors='k', linestyles='--')
+##ax.legend(fontsize=12, framealpha=0.5)
+##ax.set_xlabel('Lead time (months)')
+##ax.set_ylabel('PCC')
+##ax.set_ylim([0, 1])
+##ax.set_xlim([1, 12])
+##ax.grid()
 ##plt.tight_layout()
-##plt.show()
+##fig.savefig('ENSO_ACC_with_NMME.svg') #pdf', format='pdf')
+
+## Plot RMSE
+##fig, ax = plt.subplots()
+##p3 = ax.plot(lead, rmse, '-b', label='Hybrid', linewidth=2)
+##ax.fill_between(lead, rmse-rmse_std/2, rmse+rmse_std/2, color='b', alpha=0.1)
+##p4 = ax.plot(lead, rmse_per, '--b', label='Persistence', linewidth=1) 
+##ax.fill_between(lead, rmse_per-rmse_per_std/2, rmse_per+rmse_per_std/2, color='b', alpha=0.1)
+##p5 = ax.plot(lead, rmse_climo, '--k', linewidth=1)
+##ax.fill_between(lead, rmse_climo-rmse_climo_std/2, rmse_climo+rmse_climo_std/2, color='k', alpha=0.1)
+##for model in models:
+##    rmse = nmme_rmses[model]
+##    x = np.arange(1, len(rmse)+1)
+##    ax.plot(x, rmse, label=model, linewidth=1, alpha=0.75)
+##ax.legend(fontsize=12, framealpha=0.5) #, ncols=4, framealpha=1)
+##ax.set_xlabel('Lead time (months)')
+##ax.set_ylabel('RMSE')
+##ax.set_ylim([0, 3])
+##ax.set_xlim([1, 12])
+##ax.grid()
+##plt.tight_layout()
+##fig.savefig('ENSO_RMSE_with_NMME.svg') #pdf', format='pdf')
+
+# Plot bias of errors
+##fig, ax = plt.subplots()
+##lead = np.arange(1, len(bias)+1)
+##ax.plot(lead, bias, '-b', label='Hybrid', linewidth=2)
+##for model in models:
+##    nmme_bias = nmme_biases[model]
+##    x = np.arange(1, len(nmme_bias)+1)
+##    ax.plot(x, nmme_bias, label=model, linewidth=1, alpha=0.75)
+##ax.legend(fontsize=12, framealpha=0.5)
+##ax.set_xlabel('Lead time (months)')
+##ax.set_ylabel('Bias (K)')
+##ax.set_ylim([-2.5, 1.5])
+##ax.set_xlim([1, 12])
+##ax.grid()
+##plt.tight_layout()
+##fig.savefig('ENSO_BIAS_with_NMME.svg') #pdf', format='pdf')
+
+# Plot variances of errors 
+##fig, ax = plt.subplots()
+##lead = np.arange(1, len(var)+1)
+##ax.plot(lead, var, '-b', label='Hybrid', linewidth=2)
+##for model in models:
+##    nmme_var = nmme_vars[model]
+##    x = np.arange(1, len(nmme_var)+1)
+##    ax.plot(x, nmme_var, label=model, linewidth=1, alpha=0.75)
+##ax.legend(fontsize=12, framealpha=0.5)
+##ax.set_xlabel('Lead time (months)')
+##ax.set_ylabel('Standard Deviation (K)')
+##ax.set_ylim([0, 1.5])
+##ax.set_xlim([1, 12])
+##ax.grid()
+##plt.tight_layout()
+##fig.savefig('ENSO_STD_with_NMME.svg') #pdf', format='pdf')
 
 # ----- UNCOMMENT FOR: Nino skill contour plot for lead time vs start month ----- #
-##ds_hybrid, ds_observed, _ = get_predicted_nino34_ens(startdates,prediction_length,timestep)
+##ds_hybrid, ds_observed, ds_per = get_predicted_nino34_ens(startdates,prediction_length,timestep)
 ##pcorr = get_ninoskill_lead_stmon(ds_hybrid, ds_observed)
+##pcorr_per = get_ninoskill_lead_stmon(ds_per, ds_observed)
 ##print(f'pcorr: {pcorr}\n')
-##plot_ninoskill_contour(pcorr)
+##plot_ninoskill_contour(pcorr) #, pcorr_per)
 
 # ----- UNCOMMENT FOR: Plot spatial correlation between nino3.4 index and global sst/precip ----- #
 # -- MAKE SURE RESAMPLING IN ANOMALIES IS MONTHLY -- #
-##ds_hybrid, ds_obs = get_spatial_var_anom_ds_for_oni_corr(startdates,prediction_length,6,'p6hr') #'SST'
+##ds_hybrid, ds_obs = get_spatial_var_anom_ds_for_oni_corr(startdates,prediction_length,6,'SST') #'SST','p6hr'
 ##ds_hybrid_nino, ds_obs_nino = get_nino34_ds(startdates,prediction_length,6)
 ##calculate_plot_nino_precip_anom(startdates,ds_hybrid,ds_obs,ds_hybrid_nino,ds_obs_nino)
 ##calculate_plot_nino_precip_anom_all_season(startdates,ds_hybrid,ds_obs,ds_hybrid_nino,ds_obs_nino)
 
-# ----- UNCOMMENT FOR: Plot weekly precip anom heatmaps ----- #
+# ----- UNCOMMENT FOR: Plot weekly precip anom PCC and magnitude heatmaps ----- #
 # -- MAKE SURE RESAMPLING IN ANOMALIES IS SEASONAL -- #
 ##ds_hybrid, ds_obs = get_spatial_var_anom_ds(startdates,prediction_length,6,'p6hr')
 ##plot_spatial_anom_pcc_weekly(ds_hybrid, ds_obs, startdates, sigtest=False)
 
+# Plot forecast errors vs lead time 
+# -- MAKE SURE TO REMOVE ANOM CALCULATION IN 'get_spatial_var_anom_ds()' above
+##plot_spatial_bias_weekly_djf(ds_hybrid, ds_obs, startdates)
+
 # ----- UNCOMMENT FOR: Plot MJO-related precipitation vs lead time ----- #
 # -- MAKE SURE LATS/LONS ARE CORRECT IN BELOW FUNCTIONS -- #
-##C, C_per, C_std, C_per_std, C_all, C_obs_all, C_climo_all = get_pearson_corr_mjo_precip(startdates,prediction_length,6,lead_max=20)
-##C_std_low = np.array([a[0] for a in C_std])
-##C_std_high = np.array([a[1] for a in C_std])
-##C_per_std_low = np.array([a[0] for a in C_per_std])
-##C_per_std_high = np.array([a[1] for a in C_per_std])
-##print(f'\n\nPearson-r: {C}\n\n')
-##print(f'\n\nPearson-r_per: {C_per}\n\n')
-##lead = np.arange(5,len(C)+5) #* 5
-##
-##fig, ax = plt.subplots()
-##p1 = ax.plot(lead, C, '-b')
-##ax.fill_between(lead, C_std_low, C_std_high, color='b', alpha=0.1)
-##p2 = ax.plot(lead, C_per, '--b')
-##ax.fill_between(lead, C_per_std_low, C_per_std_high, color='b', alpha=0.1)
-##plt.axhline(y=0.5, color='k', linestyle='--')
-##ax.set_xlabel('Lead time (days)', fontsize=16)
-##ax.set_ylabel('PCC',fontsize=16)
-##ax.grid(True)
-##ax.set_ylim([0, 1])
-##ax.legend([p1[0],p2[0]],['PCC - Hybrid','PCC - Persistence'],fontsize=16)
-##ax.tick_params(axis='both', labelsize=16)
-##plt.tight_layout()
-##plt.show()
-##
-##leadtimes = [0,3,6,9]
-##fig, axs = plt.subplots(nrows=2,ncols=2,
-##                       sharex=True,sharey=True)
-##axs = axs.flatten()
-##for i, lead in enumerate(leadtimes):
-##    data_x, data_y = C_all[lead], C_obs_all[lead]
-##    axs[i].scatter(data_x, data_y)
-##    axs[i].grid(True)
-##    axs[i].set_ylim([-1,1.5])
-##    axs[i].set_xlim([-0.75,1.25])
-##
-##    linfit = linregress(data_x, data_y)
-##    x = np.linspace(-3, 3, 1000)
-##    y = linfit.slope * x + linfit.intercept
-##
-##    axs[i].plot(x,y,'-k')
-##  
-##    print(f'lead time: {5+i*3}\n') 
-##    print(f'r-value: {linfit.rvalue}\n') 
-##
-##    axs[i].tick_params(axis='both', labelsize=16)
-##    axs[i].tick_params(axis='both', labelsize=16)
-##
-##axs[0].set_ylabel('ERA5',fontsize=16)
-##axs[2].set_ylabel('ERA5',fontsize=16)
-##axs[2].set_xlabel('Hybrid',fontsize=16)
-##axs[3].set_xlabel('Hybrid',fontsize=16)
-##
-##plt.show()
+C, C_per, C_std, C_per_std, C_all, C_obs_all, C_climo_all = get_pearson_corr_mjo_precip(startdates,prediction_length,6,lead_max=20)
+C_std_low = np.array([a[0] for a in C_std])
+C_std_high = np.array([a[1] for a in C_std])
+C_per_std_low = np.array([a[0] for a in C_per_std])
+C_per_std_high = np.array([a[1] for a in C_per_std])
+print(f'\n\nPearson-r: {C}\n\n')
+print(f'\n\nPearson-r_per: {C_per}\n\n')
+lead = np.arange(5,len(C)+5) #* 5
+
+fig, ax = plt.subplots(figsize=(9,5))
+p1 = ax.plot(lead, C, '-b')
+ax.fill_between(lead, C_std_low, C_std_high, color='b', alpha=0.1)
+p2 = ax.plot(lead, C_per, '--b')
+ax.fill_between(lead, C_per_std_low, C_per_std_high, color='b', alpha=0.1)
+plt.axhline(y=0.5, color='k', linestyle='--')
+ax.set_xlabel('Lead time (days)', fontsize=16)
+ax.set_ylabel('PCC',fontsize=16)
+ax.grid(True)
+ax.set_ylim([0.25, 1])
+ax.legend([p1[0],p2[0]],['PCC - Hybrid','PCC - Persistence'],fontsize=16)
+ax.tick_params(axis='both', labelsize=16)
+plt.tight_layout()
+#plt.show()
+fig.savefig('WP_Precip_PCC.svg')
+
+leadtimes = [0,3,6,9]
+fig, axs = plt.subplots(nrows=2,ncols=2,
+                       sharex=True,sharey=True)
+axs = axs.flatten()
+for i, lead in enumerate(leadtimes):
+    data_x, data_y = C_all[lead], C_obs_all[lead]
+    axs[i].scatter(data_x, data_y)
+    axs[i].grid(True)
+    axs[i].set_ylim([-1,1.5])
+    axs[i].set_xlim([-0.75,1.25])
+
+    linfit = linregress(data_x, data_y)
+    x = np.linspace(-3, 3, 1000)
+    #y = linfit.slope * x + linfit.intercept
+    y = x
+
+    axs[i].plot(x,y,'-k')
+  
+    print(f'lead time: {5+i*3}\n') 
+    #print(f'r-value: {linfit.rvalue}\n') 
+
+    axs[i].tick_params(axis='both', labelsize=16)
+    axs[i].tick_params(axis='both', labelsize=16)
+
+axs[0].set_ylabel('ERA5',fontsize=16)
+axs[2].set_ylabel('ERA5',fontsize=16)
+axs[2].set_xlabel('Hybrid',fontsize=16)
+axs[3].set_xlabel('Hybrid',fontsize=16)
+
+plt.tight_layout()
+#plt.show()
+fig.savefig('WP_Precip_Scatter.svg')
